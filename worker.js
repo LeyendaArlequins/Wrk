@@ -339,26 +339,14 @@ end`;
         }
         
         // Servir página web
-        if (path === '/' || path === '/index.html') {
-            // Aquí pondrías tu HTML completo
-            const html = `<!DOCTYPE html>
-            <html>
-            <head>
-                <title>Contador Dorado - Cloudflare Workers</title>
-                <meta http-equiv="refresh" content="0; url=https://tu-sitio-web.com">
-            </head>
-            <body>
-                <p>Redirigiendo al Contador Dorado...</p>
-            </body>
-            </html>`;
-            
-            return new Response(html, {
-                headers: {
-                    'Content-Type': 'text/html',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
+        // Servir index.html real
+if (path === "/" || path === "/index.html") {
+    return new Response(indexHtml, {
+        headers: {
+            "Content-Type": "text/html; charset=UTF-8"
         }
+    });
+}
         
         // Endpoint no encontrado
         return new Response(JSON.stringify({
