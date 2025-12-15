@@ -1,4 +1,3 @@
-// =================== DURABLE OBJECT ===================
 class CounterDurableObject {
     constructor(state, env) {
         this.state = state;
@@ -34,12 +33,10 @@ class CounterDurableObject {
         });
     }
 
-    // Fetch handler para el Durable Object
     async fetch(request) {
         const url = new URL(request.url);
         const path = url.pathname;
         
-        // Headers CORS
         const headers = {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -47,7 +44,6 @@ class CounterDurableObject {
             'Content-Type': 'application/json'
         };
 
-        // OPTIONS preflight
         if (request.method === 'OPTIONS') {
             return new Response(null, { headers });
         }
@@ -94,7 +90,6 @@ class CounterDurableObject {
         }
     }
 
-    // Incrementar contadores
     async incrementCounters({ userId, playerName, sessionId, gameId }) {
         this.cleanupSessions();
         this.checkDailyReset();
@@ -103,17 +98,14 @@ class CounterDurableObject {
         const today = now.toDateString();
         const hourKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-${now.getHours()}`;
         
-        // Incrementar
         this.stats.total++;
         this.stats.today++;
         this.stats.requestsCount++;
         
-        // Peak today
         if (this.stats.today > this.stats.peakToday) {
             this.stats.peakToday = this.stats.today;
         }
         
-        // Usuario único
         const userKey = `user_${userId}`;
         if (!this.stats.uniqueUsers.has(userKey)) {
             this.stats.uniqueUsers.set(userKey, {
@@ -129,7 +121,6 @@ class CounterDurableObject {
             user.lastSeen = now.toISOString();
         }
         
-        // Sesión
         if (sessionId) {
             this.stats.sessions.set(sessionId, {
                 userId,
@@ -145,7 +136,6 @@ class CounterDurableObject {
             }
         }
         
-        // Guardar estado
         await this.saveStats();
         
         return {
@@ -161,7 +151,6 @@ class CounterDurableObject {
         };
     }
 
-    // Obtener contador
     async getCounterStats() {
         this.cleanupSessions();
         this.checkDailyReset();
@@ -177,7 +166,6 @@ class CounterDurableObject {
         };
     }
 
-    // Obtener estadísticas detalladas (añadir este método que falta)
     async getDetailedStats() {
         this.cleanupSessions();
         this.checkDailyReset();
@@ -195,7 +183,6 @@ class CounterDurableObject {
         };
     }
 
-    // Limpiar sesiones
     cleanupSessions() {
         const now = Date.now();
         for (const [sessionId, session] of this.stats.sessions.entries()) {
@@ -206,7 +193,6 @@ class CounterDurableObject {
         this.stats.online = this.stats.sessions.size;
     }
 
-    // Reset diario
     checkDailyReset() {
         const today = new Date().toDateString();
         if (this.stats.lastReset !== today) {
@@ -216,7 +202,6 @@ class CounterDurableObject {
         }
     }
 
-    // Heartbeat
     async updateHeartbeat(sessionId, userId) {
         this.cleanupSessions();
         
@@ -232,9 +217,7 @@ class CounterDurableObject {
         return { success: false, online: this.stats.online };
     }
 
-    // Guardar estado
     async saveStats() {
-        // Convertir Maps a objetos para almacenamiento
         const toSave = {
             ...this.stats,
             uniqueUsers: Object.fromEntries(this.stats.uniqueUsers),
@@ -253,7 +236,6 @@ export default {
         const url = new URL(request.url);
         const path = url.pathname;
         
-        // Headers CORS
         const headers = {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, OPTIONS, POST',
@@ -261,16 +243,13 @@ export default {
             'Access-Control-Max-Age': '86400'
         };
 
-        // OPTIONS preflight
         if (request.method === 'OPTIONS') {
             return new Response(null, { headers });
         }
 
-        // Obtener el Durable Object ID (estado persistente)
         const id = env.CONTADOR_STATS.idFromName('main');
         const obj = env.CONTADOR_STATS.get(id);
         
-        // Redirigir al Durable Object para operaciones de estado
         if (path === '/api/count' || path === '/api/count.js') {
             const newUrl = new URL(url);
             newUrl.pathname = '/increment';
@@ -295,7 +274,6 @@ export default {
             return obj.fetch(newUrl);
         }
         
-        // Script para Roblox
         if (path === '/api/script' || path === '/api/script.js') {
             const baseUrl = `https://${url.hostname}`;
             
@@ -307,7 +285,6 @@ local API = "${baseUrl}/api"
 local player = game.Players.LocalPlayer
 local sessionId = "S_" .. player.UserId .. "_" .. math.random(1000,9999)
 
--- Función principal
 local function register()
     local url = API .. "/count.js?userId=" .. player.UserId .. 
                "&playerName=" .. player.Name .. 
@@ -325,7 +302,6 @@ local function register()
     
     if success then
         print("✅ CONTADOR DORADO ACTIVADO")
-        -- Parsear JSON
         local jsonSuccess, data = pcall(function()
             return game:GetService("HttpService"):JSONDecode(result)
         end)
@@ -336,7 +312,6 @@ local function register()
     end
 end
 
--- Heartbeat
 local function heartbeat()
     pcall(function()
         game:GetService("HttpService"):RequestAsync{
@@ -346,10 +321,8 @@ local function heartbeat()
     end)
 end
 
--- Iniciar
 register()
 
--- Heartbeat cada 30s
 while true do
     task.wait(30)
     heartbeat()
@@ -363,7 +336,6 @@ end`;
             });
         }
         
-        // Servir página web
         if (path === "/" || path === "/index.html") {
             const indexHtml = `<!DOCTYPE html>
 <html lang="es">
@@ -463,7 +435,22 @@ end`;
         </div>
         
         <div id="stats" class="stats-grid">
-            <!-- Las estadísticas se cargarán aquí -->
+            <div class="stat-card">
+                <div class="stat-label">Total Ejecuciones</div>
+                <div class="stat-value">Cargando...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Ejecuciones Hoy</div>
+                <div class="stat-value">Cargando...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Usuarios Online</div>
+                <div class="stat-value">Cargando...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pico Online</div>
+                <div class="stat-value">Cargando...</div>
+            </div>
         </div>
         
         <button class="refresh-btn" onclick="loadStats()">🔄 Actualizar Estadísticas</button>
@@ -511,10 +498,10 @@ end`;
                 \`;
             } catch (error) {
                 console.error('Error cargando estadísticas:', error);
+                document.getElementById('stats').innerHTML = '<div class="stat-card"><div class="stat-label">Error cargando estadísticas</div></div>';
             }
         }
         
-        // Cargar estadísticas al inicio y cada 30 segundos
         loadStats();
         setInterval(loadStats, 30000);
     </script>
@@ -528,7 +515,6 @@ end`;
             });
         }
         
-        // Endpoint no encontrado
         return new Response(JSON.stringify({
             error: 'Endpoint no encontrado',
             available: [
