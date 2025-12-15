@@ -472,7 +472,7 @@
         // Obtener estadísticas detalladas (con gráficos)
         async function getDetailedStats() {
             try {
-                const response = await fetch('/api/stats');
+                const response = await fetch('/api/stats.js');
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
