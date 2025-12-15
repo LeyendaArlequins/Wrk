@@ -1,17 +1,21 @@
-// worker.js - Sistema completo en Cloudflare Workers
-// Con Durable Objects para estado persistente
+constructor(state, env) {
+    this.state = state;
+    this.storage = state.storage;
+    this.env = env;
 
-// =================== DURABLE OBJECT ===================
-// Este objeto mantiene el estado PERSISTENTE
-export class ContadorStats {
-    constructor(state, env) {
-        this.state = state;
-        this.storage = state.storage;
-        this.env = env;
-        
-        // Inicializar estado
-        state.blockConcurrencyWhile(async () => {
-            this.stats = await this.storage.get('stats') || {
+    state.blockConcurrencyWhile(async () => {
+        const saved = await this.storage.get("stats");
+
+        if (saved) {
+            this.stats = {
+                ...saved,
+                uniqueUsers: new Map(Object.entries(saved.uniqueUsers || {})),
+                sessions: new Map(Object.entries(saved.sessions || {})),
+                hourlyStats: new Map(Object.entries(saved.hourlyStats || {})),
+                dailyStats: new Map(Object.entries(saved.dailyStats || {})),
+            };
+        } else {
+            this.stats = {
                 total: 0,
                 today: 0,
                 online: 0,
@@ -24,8 +28,9 @@ export class ContadorStats {
                 lastReset: new Date().toDateString(),
                 requestsCount: 0
             };
-        });
-    }
+        }
+    });
+}
 
     // Fetch handler para el Durable Object
     async fetch(request) {
