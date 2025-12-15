@@ -7,5 +7,5 @@ name = "CONTADOR_STATS"
 class_name = "ContadorStats"
 
 [[migrations]]
-tag = "v2"
-new_classes = ["ContadorStats"]
+tag = "v3"
+new_sqlite_classes = ["ContadorStats"]
