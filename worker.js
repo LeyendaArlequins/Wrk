@@ -11,21 +11,33 @@ export class ContadorStats {
         
         // Inicializar estado
         state.blockConcurrencyWhile(async () => {
-            this.stats = await this.storage.get('stats') || {
-                total: 0,
-                today: 0,
-                online: 0,
-                uniqueUsers: new Map(),
-                sessions: new Map(),
-                hourlyStats: new Map(),
-                dailyStats: new Map(),
-                peakOnline: 0,
-                peakToday: 0,
-                lastReset: new Date().toDateString(),
-                requestsCount: 0
-            };
-        });
+    const saved = await this.storage.get('stats');
+
+    if (saved) {
+        this.stats = {
+            ...saved,
+            uniqueUsers: new Map(Object.entries(saved.uniqueUsers || {})),
+            sessions: new Map(Object.entries(saved.sessions || {})),
+            hourlyStats: new Map(Object.entries(saved.hourlyStats || {})),
+            dailyStats: new Map(Object.entries(saved.dailyStats || {}))
+        };
+    } else {
+        this.stats = {
+            total: 0,
+            today: 0,
+            online: 0,
+            uniqueUsers: new Map(),
+            sessions: new Map(),
+            hourlyStats: new Map(),
+            dailyStats: new Map(),
+            peakOnline: 0,
+            peakToday: 0,
+            lastReset: new Date().toDateString(),
+            requestsCount: 0
+        };
     }
+});
+}
 
     // Fetch handler para el Durable Object
     async fetch(request) {
