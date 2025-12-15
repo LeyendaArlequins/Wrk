@@ -1,23 +1,11 @@
 name = "contador-dorado"
+main = "worker.js"
 compatibility_date = "2023-12-01"
 
-# ================== DURABLE OBJECTS ==================
 [[durable_objects.bindings]]
 name = "CONTADOR_STATS"
 class_name = "ContadorStats"
 
-# ⚠️ OBLIGATORIO en plan FREE
 [[migrations]]
 tag = "v2"
-new_sqlite_classes = ["ContadorStats"]
-
-# ================== VARIABLES ==================
-[vars]
-API_VERSION = "2.0"
-
-# ================== RUTAS (opcional) ==================
-# Si usas dominio propio, déjalo. Si no, puedes borrar esto.
-routes = [
-  { pattern = "contador-dorado.*", zone_name = "tudominio.com" },
-  { pattern = "contador.*", zone_name = "tudominio.com" }
-]
+new_classes = ["ContadorStats"]
