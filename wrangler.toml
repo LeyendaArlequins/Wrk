@@ -1,11 +1,6 @@
 name = "contador-dorado"
 compatibility_date = "2023-12-01"
 
-# ================== FRONTEND ==================
-# Sirve automáticamente public/index.html
-[assets]
-directory = "./public"
-
 # ================== DURABLE OBJECTS ==================
 [[durable_objects.bindings]]
 name = "CONTADOR_STATS"
