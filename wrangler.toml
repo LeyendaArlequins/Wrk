@@ -1,25 +1,17 @@
 name = "contador-dorado"
+main = "worker.js"
 compatibility_date = "2023-12-01"
 
-# ================== FRONTEND ==================
-[assets]
-directory = "./public"
-
-# ================== DURABLE OBJECTS ==================
+# ================== DURABLE OBJECT ==================
 [[durable_objects.bindings]]
 name = "CONTADOR_STATS"
 class_name = "ContadorStats"
 
+# Migración correcta (NO SQLite)
 [[migrations]]
 tag = "v2"
-new_sqlite_classes = ["ContadorStats"]
+new_classes = ["ContadorStats"]
 
 # ================== VARIABLES ==================
 [vars]
 API_VERSION = "2.0"
-
-# ================== RUTAS (opcional) ==================
-routes = [
-  { pattern = "contador-dorado.*", zone_name = "tudominio.com" },
-  { pattern = "contador.*", zone_name = "tudominio.com" }
-]
