@@ -11,40 +11,26 @@ export class ContadorStats {
         
         // Inicializar estado
         state.blockConcurrencyWhile(async () => {
-    const saved = await this.storage.get('stats');
-
-    if (saved) {
-        this.stats = {
-            ...saved,
-            uniqueUsers: new Map(Object.entries(saved.uniqueUsers || {})),
-            sessions: new Map(Object.entries(saved.sessions || {})),
-            hourlyStats: new Map(Object.entries(saved.hourlyStats || {})),
-            dailyStats: new Map(Object.entries(saved.dailyStats || {}))
-        };
-    } else {
-        this.stats = {
-            total: 0,
-            today: 0,
-            online: 0,
-            uniqueUsers: new Map(),
-            sessions: new Map(),
-            hourlyStats: new Map(),
-            dailyStats: new Map(),
-            peakOnline: 0,
-            peakToday: 0,
-            lastReset: new Date().toDateString(),
-            requestsCount: 0
-        };
+            this.stats = await this.storage.get('stats') || {
+                total: 0,
+                today: 0,
+                online: 0,
+                uniqueUsers: new Map(),
+                sessions: new Map(),
+                hourlyStats: new Map(),
+                dailyStats: new Map(),
+                peakOnline: 0,
+                peakToday: 0,
+                lastReset: new Date().toDateString(),
+                requestsCount: 0
+            };
+        });
     }
-});
-}
 
     // Fetch handler para el Durable Object
     async fetch(request) {
         const url = new URL(request.url);
         const path = url.pathname;
-
-
         
         // Headers CORS
         const headers = {
@@ -71,11 +57,10 @@ export class ContadorStats {
                 case '/counter':
                     result = await this.getCounterStats();
                     break;
-
+                    
                 case '/stats':
                     result = await this.getDetailedStats();
                     break;
-                
                     
                 case '/heartbeat':
                     const { sessionId, userId } = Object.fromEntries(url.searchParams);
@@ -354,7 +339,26 @@ end`;
         }
         
         // Servir página web
-
+        if (path === '/' || path === '/index.html') {
+            // Aquí pondrías tu HTML completo
+            const html = `<!DOCTYPE html>
+            <html>
+            <head>
+                <title>Contador Dorado - Cloudflare Workers</title>
+                <meta http-equiv="refresh" content="0; url=https://tu-sitio-web.com">
+            </head>
+            <body>
+                <p>Redirigiendo al Contador Dorado...</p>
+            </body>
+            </html>`;
+            
+            return new Response(html, {
+                headers: {
+                    'Content-Type': 'text/html',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            });
+        }
         
         // Endpoint no encontrado
         return new Response(JSON.stringify({
