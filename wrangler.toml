@@ -1,12 +1,13 @@
 name = "contador-dorado"
+main = "worker.js"
 compatibility_date = "2023-12-01"
 
-# Configuración KV (base de datos)
+# Configuración KV
 kv_namespaces = [
   { binding = "CONTADOR_KV", id = "tu-id-kv-aqui" }
 ]
 
-# Configuración para Durable Objects (estado persistente)
+# Durable Objects
 [[durable_objects.bindings]]
 name = "CONTADOR_STATS"
 class_name = "ContadorStats"
@@ -15,12 +16,11 @@ class_name = "ContadorStats"
 tag = "v1"
 new_classes = ["ContadorStats"]
 
-# Rutas
-routes = [
-  { pattern = "contador-dorado.*", zone_name = "tudominio.com" },
-  { pattern = "contador.*", zone_name = "tudominio.com" }
-]
+# Rutas (opcional, solo si ya tienes dominio en Cloudflare)
+# routes = [
+#   { pattern = "contador-dorado.*", zone_name = "tudominio.com" },
+#   { pattern = "contador.*", zone_name = "tudominio.com" }
+# ]
 
-# Variables
 [vars]
 API_VERSION = "2.0"
