@@ -1,4 +1,3 @@
-// Cambia el nombre de la clase a ContadorStats
 class ContadorStats {
     constructor(state, env) {
         this.state = state;
@@ -97,7 +96,8 @@ class ContadorStats {
         
         const now = new Date();
         const today = now.toDateString();
-        const hourKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-${now.getHours()}`;
+        const hour = now.getHours();
+        const hourKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-${hour}`;
         
         this.stats.total++;
         this.stats.today++;
@@ -105,6 +105,32 @@ class ContadorStats {
         
         if (this.stats.today > this.stats.peakToday) {
             this.stats.peakToday = this.stats.today;
+        }
+        
+        // Actualizar estadísticas por hora
+        if (!this.stats.hourlyStats.has(hourKey)) {
+            this.stats.hourlyStats.set(hourKey, {
+                hour: hourKey,
+                count: 1,
+                timestamp: now.toISOString()
+            });
+        } else {
+            const hourStat = this.stats.hourlyStats.get(hourKey);
+            hourStat.count++;
+            hourStat.timestamp = now.toISOString();
+        }
+        
+        // Actualizar estadísticas diarias
+        if (!this.stats.dailyStats.has(today)) {
+            this.stats.dailyStats.set(today, {
+                date: today,
+                count: 1,
+                uniqueUsers: new Set([userId])
+            });
+        } else {
+            const dayStat = this.stats.dailyStats.get(today);
+            dayStat.count++;
+            dayStat.uniqueUsers.add(userId);
         }
         
         const userKey = `user_${userId}`;
@@ -171,15 +197,60 @@ class ContadorStats {
         this.cleanupSessions();
         this.checkDailyReset();
         
+        // Obtener últimas 12 horas
+        const now = new Date();
+        const hourlyData = [];
+        for (let i = 11; i >= 0; i--) {
+            const hour = new Date(now);
+            hour.setHours(now.getHours() - i);
+            const hourKey = `${hour.getFullYear()}-${hour.getMonth()+1}-${hour.getDate()}-${hour.getHours()}`;
+            const hourStat = this.stats.hourlyStats.get(hourKey);
+            
+            hourlyData.push({
+                hour: `${hour.getHours()}:00`,
+                count: hourStat ? hourStat.count : 0,
+                date: hourKey
+            });
+        }
+        
+        // Obtener últimos 7 días
+        const dailyData = [];
+        for (let i = 6; i >= 0; i--) {
+            const day = new Date(now);
+            day.setDate(now.getDate() - i);
+            const dayKey = day.toDateString();
+            const dayStat = this.stats.dailyStats.get(dayKey);
+            
+            dailyData.push({
+                date: dayKey.substring(4, 10), // Formato corto: "Dec 15"
+                count: dayStat ? dayStat.count : 0,
+                unique: dayStat ? dayStat.uniqueUsers.size : 0
+            });
+        }
+        
+        // Calcular estadísticas por hora actual
+        const currentHour = new Date();
+        currentHour.setMinutes(0, 0, 0);
+        const currentHourKey = `${currentHour.getFullYear()}-${currentHour.getMonth()+1}-${currentHour.getDate()}-${currentHour.getHours()}`;
+        const currentHourStat = this.stats.hourlyStats.get(currentHourKey);
+        
         return {
-            total: this.stats.total,
-            today: this.stats.today,
-            online: this.stats.online,
-            unique: this.stats.uniqueUsers.size,
-            peakOnline: this.stats.peakOnline,
-            peakToday: this.stats.peakToday,
-            requestsCount: this.stats.requestsCount,
-            lastReset: this.stats.lastReset,
+            summary: {
+                total: this.stats.total,
+                today: this.stats.today,
+                online: this.stats.online,
+                unique: this.stats.uniqueUsers.size,
+                peakOnline: this.stats.peakOnline,
+                peakToday: this.stats.peakToday,
+                requestsCount: this.stats.requestsCount,
+                lastReset: this.stats.lastReset
+            },
+            hourly: hourlyData,
+            daily: dailyData,
+            currentHour: {
+                count: currentHourStat ? currentHourStat.count : 0,
+                hour: currentHourKey
+            },
             lastUpdate: new Date().toISOString()
         };
     }
@@ -219,13 +290,21 @@ class ContadorStats {
     }
 
     async saveStats() {
+        // Convertir Maps a objetos para almacenamiento
         const toSave = {
             ...this.stats,
             uniqueUsers: Object.fromEntries(this.stats.uniqueUsers),
             sessions: Object.fromEntries(this.stats.sessions),
             hourlyStats: Object.fromEntries(this.stats.hourlyStats),
-            dailyStats: Object.fromEntries(this.stats.dailyStats)
+            dailyStats: Object.fromEntries(this.stats.dailyStats.entries())
         };
+        
+        // Convertir Sets a arrays para dailyStats
+        for (const [key, value] of Object.entries(toSave.dailyStats || {})) {
+            if (value.uniqueUsers && value.uniqueUsers instanceof Set) {
+                value.uniqueUsers = Array.from(value.uniqueUsers);
+            }
+        }
         
         await this.storage.put('stats', toSave);
     }
@@ -248,11 +327,9 @@ export default {
             return new Response(null, { headers });
         }
 
-        // Obtener el Durable Object ID (estado persistente)
         const id = env.CONTADOR_STATS.idFromName('main');
         const obj = env.CONTADOR_STATS.get(id);
         
-        // Redirigir al Durable Object para operaciones de estado
         if (path === '/api/count' || path === '/api/count.js') {
             const newUrl = new URL(url);
             newUrl.pathname = '/increment';
@@ -277,7 +354,7 @@ export default {
             return obj.fetch(newUrl);
         }
         
-        // Script para Roblox
+        // Script para Roblox - ACTUALIZADO para que funcione con tu HTML
         if (path === '/api/script' || path === '/api/script.js') {
             const baseUrl = `https://${url.hostname}`;
             
@@ -312,6 +389,7 @@ local function register()
         if jsonSuccess then
             print("📊 Total: " .. tostring(data.stats.total))
             print("👥 Online: " .. tostring(data.stats.online))
+            print("🎯 Tus ejecuciones: " .. tostring(data.stats.yourTotal))
         end
     end
 end
@@ -325,8 +403,10 @@ local function heartbeat()
     end)
 end
 
+-- Iniciar contador
 register()
 
+-- Heartbeat cada 30s para mantener sesión activa
 while true do
     task.wait(30)
     heartbeat()
@@ -340,17 +420,25 @@ end`;
             });
         }
         
-        // Si tienes el index.html separado, asegúrate de servirlo correctamente
-        // Esta parte dependerá de cómo tienes configurado tu proyecto
+        // Servir el index.html
         if (path === "/" || path === "/index.html") {
-            // Aquí deberías devolver tu archivo index.html
-            // Si está en la carpeta public, puedes leerlo de allí
-            // O si usas [assets] en wrangler.toml, debería servirse automáticamente
-            return new Response("Página principal - Contador Dorado", {
-                headers: {
-                    "Content-Type": "text/html; charset=UTF-8"
-                }
-            });
+            // Si tienes el HTML en una carpeta separada, cárgalo desde allí
+            // O si está en la misma ubicación, usa tu HTML
+            try {
+                // Reemplaza esto con la ruta correcta a tu HTML
+                const html = `TU HTML AQUÍ - PERO MEJOR SÍRVELO DESDE TU CARPETA PUBLIC`;
+                return new Response(html, {
+                    headers: {
+                        "Content-Type": "text/html; charset=UTF-8"
+                    }
+                });
+            } catch (error) {
+                return new Response(`<h1>Contador Dorado 🏆</h1><p>Sistema funcionando correctamente</p><p><a href="/api/counter.js">Ver estadísticas</a></p>`, {
+                    headers: {
+                        "Content-Type": "text/html; charset=UTF-8"
+                    }
+                });
+            }
         }
         
         return new Response(JSON.stringify({
@@ -370,5 +458,5 @@ end`;
     }
 };
 
-// Exporta la clase con el nombre CORRECTO: ContadorStats
+// Exporta la clase del Durable Object
 export { ContadorStats };
