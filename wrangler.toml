@@ -10,8 +10,7 @@ class_name = "ContadorStats"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["ContadorStats"]
-
+new_sqlite_classes = ["ContadorStats"]
 # Rutas (opcional, solo si ya tienes dominio en Cloudflare)
 # routes = [
 #   { pattern = "contador-dorado.*", zone_name = "tudominio.com" },
