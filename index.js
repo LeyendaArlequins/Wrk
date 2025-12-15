@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏆 Contador Dorado | Estadísticas en Tiempo Real</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --gold: #FFD700;
+            --dark-gold: #FFA500;
+            --bg-dark: #0a0a0a;
+            --bg-darker: #050505;
+            --card-bg: rgba(26, 26, 26, 0.9);
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--gold);
+            overflow-x: hidden;
+        }
+
+        /* Partículas doradas */
+        .gold-particle {
+            position: absolute;
+            background: radial-gradient(circle, rgba(255,215,0,0.8) 0%, rgba(255,215,0,0) 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Contenedor principal */
+        .container {
+            position: relative;
+            z-index: 2;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem;
+            background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.1), transparent);
+            border-radius: 20px;
+            border: 2px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .title {
+            background: linear-gradient(to right, var(--gold), var(--dark-gold), var(--gold));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+        }
+
+        .subtitle {
+            color: rgba(255, 215, 0, 0.8);
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 20px;
+            padding: 2.5rem;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s, box-shadow 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(255, 215, 0, 0.2);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(
+                from 0deg,
+                transparent,
+                rgba(255, 215, 0, 0.1),
+                transparent 30%
+            );
+            animation: rotate 10s linear infinite;
+        }
+
+        .stat-value {
+            font-size: 4.5rem;
+            font-weight: 800;
+            background: linear-gradient(45deg, var(--gold), var(--dark-gold));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 1rem;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+        }
+
+        .stat-label {
+            font-size: 1.2rem;
+            color: rgba(255, 215, 0, 0.9);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .stat-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--gold);
+        }
+
+        /* Charts Section */
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .chart-container {
+            background: var(--card-bg);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 20px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .chart-title {
+            font-size: 1.5rem;
+            color: var(--gold);
+            margin-bottom: 1.5rem;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        /* Script Section */
+        .script-section {
+            background: var(--card-bg);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 20px;
+            padding: 2.5rem;
+            margin-bottom: 3rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .section-title {
+            font-size: 2rem;
+            color: var(--gold);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .script-code {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 10px;
+            padding: 2rem;
+            font-family: 'Courier New', monospace;
+            font-size: 1.1rem;
+            color: var(--gold);
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid var(--gold);
+        }
+
+        .buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, var(--gold), var(--dark-gold));
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 215, 0, 0.1);
+            color: var(--gold);
+            border: 2px solid var(--gold);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 215, 0, 0.2);
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: rgba(255, 215, 0, 0.7);
+            font-size: 0.9rem;
+            border-top: 1px solid rgba(255, 215, 0, 0.2);
+        }
+
+        /* Animations */
+        @keyframes rotate {
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .title {
+                font-size: 2.5rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-container {
+                min-width: 100%;
+            }
+            
+            .stat-value {
+                font-size: 3.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Partículas doradas -->
+    <div id="particles"></div>
+
+    <!-- Contenido principal -->
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="title"><i class="fas fa-crown"></i> CONTADOR DORADO</h1>
+            <p class="subtitle">ESTADÍSTICAS EN TIEMPO REAL PARA ROBLOX</p>
+        </header>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-bolt"></i></div>
+                <div class="stat-value" id="total">0</div>
+                <div class="stat-label">EJECUCIONES TOTALES</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-calendar-day"></i></div>
+                <div class="stat-value" id="today">0</div>
+                <div class="stat-label">HOY</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                <div class="stat-value" id="online">0</div>
+                <div class="stat-label">EN LÍNEA</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-user-plus"></i></div>
+                <div class="stat-value" id="unique">0</div>
+                <div class="stat-label">USUARIOS ÚNICOS</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+                <div class="stat-value" id="hourly">0</div>
+                <div class="stat-label">POR HORA</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-trophy"></i></div>
+                <div class="stat-value" id="peak">0</div>
+                <div class="stat-label">RÉCORD ONLINE</div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-section">
+            <div class="chart-container">
+                <h3 class="chart-title"><i class="fas fa-chart-bar"></i> ACTIVIDAD POR HORA</h3>
+                <canvas id="hourlyChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3 class="chart-title"><i class="fas fa-chart-line"></i> ESTADÍSTICAS DIARIAS</h3>
+                <canvas id="dailyChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Script Section -->
+        <div class="script-section">
+            <h2 class="section-title"><i class="fas fa-code"></i> CÓDIGO PARA ROBLOX</h2>
+            
+            <div class="script-code" id="scriptCode">
+-- 🏆 CONTADOR DORADO v2.0 🏆
+-- Script oficial: https://contador-dorado.vercel.app
+-- Estadísticas en tiempo real
+
+local API = "https://contador-dorado.vercel.app/api"
+local player = game.Players.LocalPlayer
+
+-- Generar sesión única
+local sessionId = "S_" .. player.UserId .. "_" .. math.random(1000,9999)
+
+print("╔══════════════════════════════════════════╗")
+print("║         🏆 CONTADOR DORADO 🏆           ║")
+print("╠══════════════════════════════════════════╣")
+print("║  Jugador: " .. player.Name)
+print("║  UserId:  " .. player.UserId)
+print("║  Sesión:  " .. sessionId)
+print("║  Server:  " .. API)
+print("╚══════════════════════════════════════════╝")
+
+-- Función principal
+local function registerExecution()
+    local url = API .. "/count?userId=" .. player.UserId .. 
+               "&playerName=" .. player.Name .. 
+               "&sessionId=" .. sessionId .. 
+               "&gameId=" .. game.GameId .. 
+               "&time=" .. os.time()
+    
+    local success, result = pcall(function()
+        local req = game:GetService("HttpService"):RequestAsync{
+            Url = url,
+            Method = "GET",
+            Headers = {
+                ["User-Agent"] = "RobloxCounter/Gold"
+            }
+        }
+        return req.Body
+    end)
+    
+    if success then
+        -- Parsear JSON
+        local jsonSuccess, data = pcall(function()
+            return game:GetService("HttpService"):JSONDecode(result)
+        end)
+        
+        if jsonSuccess then
+            print("✅ REGISTRADO EXITOSAMENTE!")
+            print("📊 Total: " .. tostring(data.stats.total))
+            print("🎯 Hoy: " .. tostring(data.stats.today))
+            print("👥 En línea: " .. tostring(data.stats.online))
+            print("⭐ Únicos: " .. tostring(data.stats.unique))
+            print("🔥 Tus ejecuciones: " .. tostring(data.stats.yourTotal))
+            
+            -- Notificación
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "🏆 Contador Dorado",
+                Text = "Conectado! Online: " .. data.stats.online,
+                Icon = "rbxassetid://4483345998",
+                Duration = 5
+            })
+        else
+            print("✅ " .. result)
+        end
+    else
+        warn("❌ Error: " .. tostring(result))
+    end
+end
+
+-- Función para heartbeat
+local function sendHeartbeat()
+    pcall(function()
+        game:GetService("HttpService"):RequestAsync{
+            Url = API .. "/heartbeat?sessionId=" .. sessionId .. "&userId=" .. player.UserId,
+            Method = "GET"
+        }
+    end)
+end
+
+-- Sistema de comandos
+local function setupCommands()
+    local function processCommand(message)
+        if message.TextSource.UserId == player.UserId then
+            local text = message.Text:lower()
+            
+            if text == "/contador" then
+                registerExecution()
+                return true
+            elseif text == "/stats" then
+                pcall(function()
+                    local req = game:GetService("HttpService"):RequestAsync{
+                        Url = API .. "/stats",
+                        Method = "GET"
+                    }
+                    print("📈 Estadísticas: " .. req.Body)
+                end)
+                return true
+            end
+        end
+        return false
+    end
+    
+    -- Conectar al chat
+    if game:GetService("TextChatService"):FindFirstChild("TextChannels") then
+        local RBXGeneral = game:GetService("TextChatService").TextChannels.RBXGeneral
+        if RBXGeneral then
+            RBXGeneral.OnIncomingMessage = function(message)
+                if not processCommand(message) then
+                    return message
+                end
+                return nil
+            end
+        end
+    end
+end
+
+-- INICIAR TODO
+registerExecution()
+setupCommands()
+
+-- Heartbeat cada 25 segundos
+while true do
+    task.wait(25)
+    sendHeartbeat()
+end
+            </div>
+            
+            <div class="buttons">
+                <button class="btn btn-primary" onclick="copyScript()">
+                    <i class="fas fa-copy"></i> Copiar Script
+                </button>
+                <button class="btn btn-secondary" onclick="updateStats()">
+                    <i class="fas fa-sync-alt"></i> Actualizar
+                </button>
+                <button class="btn btn-secondary" onclick="showStats()">
+                    <i class="fas fa-chart-pie"></i> Ver Estadísticas
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p><i class="fas fa-heart" style="color: #ff4444;"></i> Contador Dorado v2.0 | Estadísticas en tiempo real</p>
+            <p>Actualizado: <span id="lastUpdate">--:--:--</span> | <span id="status" class="pulse">🟢 Conectado</span></p>
+        </footer>
+    </div>
+
+    <script>
+        // Variables globales
+        let hourlyChart, dailyChart;
+        let currentUrl = window.location.origin;
+
+        // Inicializar partículas
+        function createParticles() {
+            const particles = document.getElementById('particles');
+            const particleCount = 25;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add('gold-particle');
+                
+                const size = Math.random() * 80 + 20;
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.left = `${Math.random() * 100}vw`;
+                particle.style.top = `${Math.random() * 100}vh`;
+                particle.style.opacity = Math.random() * 0.2 + 0.1;
+                
+                particle.animate([
+                    { transform: 'translate(0, 0) rotate(0deg)', opacity: particle.style.opacity },
+                    { 
+                        transform: `translate(${Math.random() * 100 - 50}px, ${Math.random() * 100 - 50}px) rotate(${Math.random() * 360}deg)`,
+                        opacity: Math.random() * 0.1
+                    }
+                ], {
+                    duration: Math.random() * 15000 + 5000,
+                    iterations: Infinity,
+                    direction: 'alternate'
+                });
+                
+                particles.appendChild(particle);
+            }
+        }
+
+        // Formatear números
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        // Actualizar contador principal
+        async function updateCounter() {
+            try {
+                const response = await fetch('/api/counter.js');
+                const data = await response.json();
+                
+                // Actualizar valores principales
+                document.getElementById('total').textContent = formatNumber(data.total);
+                document.getElementById('today').textContent = formatNumber(data.today);
+                document.getElementById('online').textContent = formatNumber(data.online);
+                document.getElementById('unique').textContent = formatNumber(data.unique);
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+                
+                // Actualizar peaks si existen
+                if (data.peakOnline) {
+                    document.getElementById('peak').textContent = formatNumber(data.peakOnline);
+                }
+                
+                // Efecto visual
+                const counter = document.getElementById('total');
+                counter.style.transform = 'scale(1.05)';
+                setTimeout(() => counter.style.transform = 'scale(1)', 300);
+                
+                // Actualizar script con URL actual
+                const scriptCode = document.getElementById('scriptCode');
+                if (scriptCode) {
+                    scriptCode.textContent = scriptCode.textContent.replace(
+                        /https:\/\/[^/]+/g,
+                        currentUrl
+                    );
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('Error actualizando contador:', error);
+                const statusElement = document.getElementById('status');
+                if (statusElement) {
+                    statusElement.innerHTML = '🔴 Desconectado';
+                    statusElement.style.color = '#ff4444';
+                }
+            }
+        }
+
+        // Obtener estadísticas detalladas (con gráficos)
+        async function getDetailedStats() {
+            try {
+                const response = await fetch('/api/stats.js');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                
+                // Actualizar estadística por hora
+                const hourlyElement = document.getElementById('hourly');
+                if (hourlyElement && data.hourly && data.hourly.length > 0) {
+                    const latestHour = data.hourly[data.hourly.length - 1];
+                    hourlyElement.textContent = formatNumber(latestHour.count);
+                }
+                
+                // Actualizar gráficos si existen
+                updateCharts(data);
+                
+                return data;
+            } catch (error) {
+                console.error('Error obteniendo estadísticas:', error);
+                return null;
+            }
+        }
+
+        // Inicializar gráficos
+        function initCharts() {
+            const hourlyCanvas = document.getElementById('hourlyChart');
+            const dailyCanvas = document.getElementById('dailyChart');
+            
+            if (!hourlyCanvas || !dailyCanvas) {
+                console.log('Canvas no encontrados, omitiendo gráficos');
+                return;
+            }
+            
+            const hourlyCtx = hourlyCanvas.getContext('2d');
+            const dailyCtx = dailyCanvas.getContext('2d');
+            
+            // Gráfico por hora
+            hourlyChart = new Chart(hourlyCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Ejecuciones por Hora',
+                        data: [],
+                        borderColor: '#FFD700',
+                        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#FFD700' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 215, 0, 0.1)' },
+                            ticks: { color: '#FFD700' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255, 215, 0, 0.1)' },
+                            ticks: { color: '#FFD700' }
+                        }
+                    }
+                }
+            });
+            
+            // Gráfico diario
+            dailyChart = new Chart(dailyCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Ejecuciones Diarias',
+                        data: [],
+                        backgroundColor: 'rgba(255, 215, 0, 0.6)',
+                        borderColor: '#FFD700',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#FFD700' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 215, 0, 0.1)' },
+                            ticks: { color: '#FFD700' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255, 215, 0, 0.1)' },
+                            ticks: { color: '#FFD700' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Actualizar gráficos
+        function updateCharts(statsData) {
+            if (!statsData || !hourlyChart || !dailyChart) return;
+            
+            // Actualizar gráfico por hora
+            if (statsData.hourly && statsData.hourly.length > 0) {
+                const last12Hours = statsData.hourly.slice(-12);
+                hourlyChart.data.labels = last12Hours.map(h => h.hour || '');
+                hourlyChart.data.datasets[0].data = last12Hours.map(h => h.count || 0);
+                hourlyChart.update('none');
+            }
+            
+            // Actualizar gráfico diario
+            if (statsData.daily && statsData.daily.length > 0) {
+                dailyChart.data.labels = statsData.daily.map(d => d.date || '');
+                dailyChart.data.datasets[0].data = statsData.daily.map(d => d.count || 0);
+                dailyChart.update('none');
+            }
+        }
+
+        // Copiar script
+        async function copyScript() {
+            const scriptCode = document.getElementById('scriptCode');
+            if (!scriptCode) return;
+            
+            try {
+                await navigator.clipboard.writeText(scriptCode.textContent);
+                
+                const btn = document.querySelector('.btn-primary');
+                if (btn) {
+                    const originalHTML = btn.innerHTML;
+                    btn.innerHTML = '<i class="fas fa-check"></i> ¡Copiado!';
+                    btn.style.background = 'linear-gradient(45deg, #00FF00, #00CC00)';
+                    
+                    setTimeout(() => {
+                        btn.innerHTML = originalHTML;
+                        btn.style.background = 'linear-gradient(45deg, #FFD700, #FFA500)';
+                    }, 2000);
+                }
+            } catch (err) {
+                alert('Error al copiar: ' + err.message);
+            }
+        }
+
+        // Actualizar todo
+        async function updateStats() {
+            await updateCounter();
+            await getDetailedStats();
+            
+            const btn = document.querySelector('.btn-secondary');
+            if (btn) {
+                btn.innerHTML = '<i class="fas fa-check"></i> Actualizado';
+                setTimeout(() => {
+                    btn.innerHTML = '<i class="fas fa-sync-alt"></i> Actualizar';
+                }, 1000);
+            }
+        }
+
+        // Mostrar estadísticas en consola
+        async function showStats() {
+            const stats = await getDetailedStats();
+            if (stats && stats.summary) {
+                console.log('📊 ESTADÍSTICAS DETALLADAS:', stats);
+                alert(`Total: ${formatNumber(stats.summary.total)}\nHoy: ${formatNumber(stats.summary.today)}\nOnline: ${formatNumber(stats.summary.online)}`);
+            } else {
+                alert('No se pudieron cargar las estadísticas');
+            }
+        }
+
+        // Sistema de actualización automática
+        function startAutoUpdate() {
+            // Actualizar contador cada 3 segundos
+            setInterval(updateCounter, 3000);
+            
+            // Actualizar estadísticas cada 30 segundos
+            setInterval(getDetailedStats, 30000);
+            
+            // Actualizar título dinámico
+            setInterval(() => {
+                const onlineElement = document.getElementById('online');
+                if (onlineElement) {
+                    const online = onlineElement.textContent || '0';
+                    document.title = `🏆 ${online} Online | Contador Dorado`;
+                }
+            }, 5000);
+        }
+
+        // Conectar con WebSocket si está disponible
+        function connectWebSocket() {
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host.replace('http://', '').replace('https://', '');
+                const ws = new WebSocket(`${protocol}//${host}`);
+                
+                ws.onopen = () => {
+                    console.log('🔗 WebSocket conectado');
+                    const statusElement = document.getElementById('status');
+                    if (statusElement) {
+                        statusElement.innerHTML = '🟢 Conectado en tiempo real';
+                    }
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'STATS_UPDATE') {
+                            updateCounter();
+                        }
+                    } catch (e) {
+                        console.error('Error procesando mensaje WebSocket:', e);
+                    }
+                };
+                
+                ws.onclose = () => {
+                    console.log('WebSocket desconectado, reconectando en 5s...');
+                    setTimeout(connectWebSocket, 5000);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                };
+                
+                return ws;
+            } catch (error) {
+                console.log('WebSocket no disponible:', error);
+                return null;
+            }
+        }
+
+        // Inicializar
+        document.addEventListener('DOMContentLoaded', () => {
+            createParticles();
+            initCharts();
+            updateCounter().then(() => getDetailedStats());
+            startAutoUpdate();
+            
+            // Efecto de carga
+            document.body.style.opacity = '0';
+            document.body.style.transition = 'opacity 1s';
+            setTimeout(() => {
+                document.body.style.opacity = '1';
+            }, 100);
+            
+            // Intentar conectar WebSocket
+            if (window.location.protocol === 'https:') {
+                setTimeout(connectWebSocket, 2000);
+            }
+        });
+
+        // Manejar errores no capturados
+        window.addEventListener('error', (event) => {
+            console.error('Error no capturado:', event.error);
+        });
+
+        // Manejar promesas rechazadas no capturadas
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Promesa rechazada no capturada:', event.reason);
+        });
+    </script>
+</body>
+</html>
