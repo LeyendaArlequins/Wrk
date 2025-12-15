@@ -43,6 +43,18 @@ export class ContadorStats {
     async fetch(request) {
         const url = new URL(request.url);
         const path = url.pathname;
+
+
+    async getDetailedStats() {
+    this.cleanupSessions();
+    this.checkDailyReset();
+
+    return {
+        ...this.stats,
+        uniqueUsers: Object.fromEntries(this.stats.uniqueUsers),
+        sessions: Object.fromEntries(this.stats.sessions)
+    };
+    }
         
         // Headers CORS
         const headers = {
