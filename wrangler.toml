@@ -1,6 +1,9 @@
-name = "wrk"
+name = "contador-dorado"
 main = "worker.js"
 compatibility_date = "2023-12-01"
+
+[assets]
+directory = "./public"
 
 [[durable_objects.bindings]]
 name = "CONTADOR_STATS"
