@@ -352,25 +352,24 @@ end`;
         
         // Servir página web
         if (path === '/' || path === '/index.html') {
-            // Aquí pondrías tu HTML completo
-            const html = `<!DOCTYPE html>
-            <html>
-            <head>
-                <title>Contador Dorado - Cloudflare Workers</title>
-                <meta http-equiv="refresh" content="0; url=https://tu-sitio-web.com">
-            </head>
-            <body>
-                <p>Redirigiendo al Contador Dorado...</p>
-            </body>
-            </html>`;
-            
-            return new Response(html, {
-                headers: {
-                    'Content-Type': 'text/html',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Contador Dorado</title>
+</head>
+<body>
+    <h1>🔥 Contador Dorado</h1>
+    <p>Este contenido se sirve DIRECTO desde Cloudflare Workers</p>
+</body>
+</html>`;
+
+    return new Response(html, {
+        headers: {
+            'Content-Type': 'text/html'
         }
+    });
+}
         
         // Endpoint no encontrado
         return new Response(JSON.stringify({
