@@ -71,6 +71,10 @@ export class ContadorStats {
                 case '/counter':
                     result = await this.getCounterStats();
                     break;
+
+                case '/stats':
+                    result = await this.getDetailedStats();
+                    break;
                 
                     
                 case '/heartbeat':
