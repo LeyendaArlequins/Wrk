@@ -45,16 +45,6 @@ export class ContadorStats {
         const path = url.pathname;
 
 
-    async getDetailedStats() {
-    this.cleanupSessions();
-    this.checkDailyReset();
-
-    return {
-        ...this.stats,
-        uniqueUsers: Object.fromEntries(this.stats.uniqueUsers),
-        sessions: Object.fromEntries(this.stats.sessions)
-    };
-    }
         
         // Headers CORS
         const headers = {
@@ -81,10 +71,7 @@ export class ContadorStats {
                 case '/counter':
                     result = await this.getCounterStats();
                     break;
-                    
-                case '/stats':
-                    result = await this.getDetailedStats();
-                    break;
+                
                     
                 case '/heartbeat':
                     const { sessionId, userId } = Object.fromEntries(url.searchParams);
