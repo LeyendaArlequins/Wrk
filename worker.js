@@ -140,22 +140,30 @@ class ContadorStats {
                 playerName: playerName || `User_${userId}`,
                 firstSeen: now.toISOString(),
                 lastSeen: now.toISOString(),
-                totalExecutions: 1
+                totalExecutions: 1,
+                sessions: [sessionId]
             });
         } else {
             const user = this.stats.uniqueUsers.get(userKey);
             user.totalExecutions++;
             user.lastSeen = now.toISOString();
+            if (!user.sessions.includes(sessionId)) {
+                user.sessions.push(sessionId);
+            }
         }
         
+        // MEJORA: Siempre crear/actualizar sesión incluso si ya existe
         if (sessionId) {
             this.stats.sessions.set(sessionId, {
                 userId,
                 playerName: playerName || `User_${userId}`,
                 lastHeartbeat: Date.now(),
                 created: Date.now(),
-                gameId
+                gameId,
+                lastActivity: Date.now()
             });
+            
+            // Actualizar contador de online
             this.stats.online = this.stats.sessions.size;
             
             if (this.stats.online > this.stats.peakOnline) {
@@ -179,6 +187,7 @@ class ContadorStats {
     }
 
     async getCounterStats() {
+        // Siempre limpiar sesiones antes de devolver datos
         this.cleanupSessions();
         this.checkDailyReset();
         
@@ -189,7 +198,8 @@ class ContadorStats {
             unique: this.stats.uniqueUsers.size,
             peakOnline: this.stats.peakOnline,
             peakToday: this.stats.peakToday,
-            lastUpdate: new Date().toISOString()
+            lastUpdate: new Date().toISOString(),
+            sessionsCount: this.stats.sessions.size // Para debug
         };
     }
 
@@ -243,7 +253,8 @@ class ContadorStats {
                 peakOnline: this.stats.peakOnline,
                 peakToday: this.stats.peakToday,
                 requestsCount: this.stats.requestsCount,
-                lastReset: this.stats.lastReset
+                lastReset: this.stats.lastReset,
+                activeSessions: this.stats.sessions.size
             },
             hourly: hourlyData,
             daily: dailyData,
@@ -255,14 +266,30 @@ class ContadorStats {
         };
     }
 
+    // MEJORA: Aumentar tiempo de limpieza a 90 segundos
     cleanupSessions() {
         const now = Date.now();
+        const sessionsToDelete = [];
+        
         for (const [sessionId, session] of this.stats.sessions.entries()) {
-            if (now - session.lastHeartbeat > 45000) {
-                this.stats.sessions.delete(sessionId);
+            // 90 segundos sin heartbeat = sesión muerta
+            if (now - session.lastHeartbeat > 90000) {
+                sessionsToDelete.push(sessionId);
             }
         }
+        
+        // Eliminar sesiones muertas
+        for (const sessionId of sessionsToDelete) {
+            this.stats.sessions.delete(sessionId);
+        }
+        
+        // Actualizar contador de online
         this.stats.online = this.stats.sessions.size;
+        
+        // Si eliminamos sesiones, guardar cambios
+        if (sessionsToDelete.length > 0) {
+            this.saveStats().catch(console.error);
+        }
     }
 
     checkDailyReset() {
@@ -271,42 +298,103 @@ class ContadorStats {
             this.stats.today = 0;
             this.stats.peakToday = 0;
             this.stats.lastReset = today;
+            this.saveStats().catch(console.error);
         }
     }
 
+    // MEJORA: Manejo mejorado de heartbeat
     async updateHeartbeat(sessionId, userId) {
-        this.cleanupSessions();
-        
-        if (sessionId && this.stats.sessions.has(sessionId)) {
-            const session = this.stats.sessions.get(sessionId);
-            if (session.userId === userId) {
-                session.lastHeartbeat = Date.now();
-                await this.saveStats();
-                return { success: true, online: this.stats.online };
-            }
+        if (!sessionId || !userId) {
+            return { success: false, online: this.stats.online };
         }
         
-        return { success: false, online: this.stats.online };
+        this.cleanupSessions();
+        
+        const now = Date.now();
+        
+        if (this.stats.sessions.has(sessionId)) {
+            // Actualizar sesión existente
+            const session = this.stats.sessions.get(sessionId);
+            session.lastHeartbeat = now;
+            session.lastActivity = now;
+            
+            await this.saveStats();
+            return { 
+                success: true, 
+                online: this.stats.online,
+                message: "Heartbeat actualizado"
+            };
+        } else {
+            // Sesión no encontrada, crear una nueva si userId coincide
+            // Buscar si el usuario tiene otra sesión activa
+            let userSessionFound = false;
+            for (const [sid, session] of this.stats.sessions.entries()) {
+                if (session.userId === userId) {
+                    // Actualizar sesión existente del usuario
+                    session.lastHeartbeat = now;
+                    session.lastActivity = now;
+                    userSessionFound = true;
+                    break;
+                }
+            }
+            
+            if (!userSessionFound) {
+                // Crear nueva sesión
+                this.stats.sessions.set(sessionId, {
+                    userId,
+                    playerName: `User_${userId}`,
+                    lastHeartbeat: now,
+                    created: now,
+                    lastActivity: now
+                });
+                
+                this.stats.online = this.stats.sessions.size;
+                
+                if (this.stats.online > this.stats.peakOnline) {
+                    this.stats.peakOnline = this.stats.online;
+                }
+            }
+            
+            await this.saveStats();
+            return { 
+                success: true, 
+                online: this.stats.online,
+                message: userSessionFound ? "Sesión del usuario actualizada" : "Nueva sesión creada"
+            };
+        }
     }
 
     async saveStats() {
-        // Convertir Maps a objetos para almacenamiento
-        const toSave = {
-            ...this.stats,
-            uniqueUsers: Object.fromEntries(this.stats.uniqueUsers),
-            sessions: Object.fromEntries(this.stats.sessions),
-            hourlyStats: Object.fromEntries(this.stats.hourlyStats),
-            dailyStats: Object.fromEntries(this.stats.dailyStats.entries())
-        };
-        
-        // Convertir Sets a arrays para dailyStats
-        for (const [key, value] of Object.entries(toSave.dailyStats || {})) {
-            if (value.uniqueUsers && value.uniqueUsers instanceof Set) {
-                value.uniqueUsers = Array.from(value.uniqueUsers);
+        try {
+            // Convertir Maps a objetos para almacenamiento
+            const toSave = {
+                ...this.stats,
+                uniqueUsers: Object.fromEntries(this.stats.uniqueUsers),
+                sessions: Object.fromEntries(this.stats.sessions),
+                hourlyStats: Object.fromEntries(this.stats.hourlyStats),
+                dailyStats: Object.fromEntries(this.stats.dailyStats.entries())
+            };
+            
+            // Convertir Sets a arrays para dailyStats
+            for (const [key, value] of Object.entries(toSave.dailyStats || {})) {
+                if (value.uniqueUsers && value.uniqueUsers instanceof Set) {
+                    value.uniqueUsers = Array.from(value.uniqueUsers);
+                }
             }
+            
+            // Convertir arrays de sesiones en usuarios
+            for (const [key, user] of Object.entries(toSave.uniqueUsers || {})) {
+                if (user.sessions && Array.isArray(user.sessions)) {
+                    // Mantener como array
+                }
+            }
+            
+            await this.storage.put('stats', toSave);
+            return true;
+        } catch (error) {
+            console.error('Error guardando stats:', error);
+            return false;
         }
-        
-        await this.storage.put('stats', toSave);
     }
 }
 
@@ -330,6 +418,7 @@ export default {
         const id = env.CONTADOR_STATS.idFromName('main');
         const obj = env.CONTADOR_STATS.get(id);
         
+        // Manejar ambas versiones: con y sin .js
         if (path === '/api/count' || path === '/api/count.js') {
             const newUrl = new URL(url);
             newUrl.pathname = '/increment';
@@ -354,62 +443,157 @@ export default {
             return obj.fetch(newUrl);
         }
         
-        // Script para Roblox - ACTUALIZADO para que funcione con tu HTML
+        // Script para Roblox - MEJORADO
         if (path === '/api/script' || path === '/api/script.js') {
             const baseUrl = `https://${url.hostname}`;
             
-            const script = `-- 🏆 CONTADOR DORADO - Cloudflare Workers 🏆
--- Estado PERSISTENTE - Sin pérdida de datos
+            const script = `-- 🏆 CONTADOR DORADO - SISTEMA MEJORADO 🏆
+-- Estado PERSISTENTE con mejor manejo de sesiones
 -- URL: ${baseUrl}
 
-local API = "${baseUrl}/api"
+local HttpService = game:GetService("HttpService")
 local player = game.Players.LocalPlayer
+
+local API = "${baseUrl}/api"
 local sessionId = "S_" .. player.UserId .. "_" .. math.random(1000,9999)
 
-local function register()
-    local url = API .. "/count.js?userId=" .. player.UserId .. 
-               "&playerName=" .. player.Name .. 
-               "&sessionId=" .. sessionId .. 
-               "&gameId=" .. game.GameId .. 
-               "&time=" .. os.time()
+print("🏆 CONTADOR DORADO - SISTEMA MEJORADO")
+
+-- Función para enviar requests con mejor manejo de errores
+local function sendRequest(endpoint, params)
+    local url = API .. endpoint .. "?"
+    
+    for k, v in pairs(params or {}) do
+        url = url .. k .. "=" .. HttpService:UrlEncode(tostring(v)) .. "&"
+    end
     
     local success, result = pcall(function()
-        local req = game:GetService("HttpService"):RequestAsync{
-            Url = url,
-            Method = "GET"
-        }
+        local req = HttpService:RequestAsync({
+            Url = url:sub(1, -2),
+            Method = "GET",
+            Headers = {
+                ["Cache-Control"] = "no-cache"
+            }
+        })
         return req.Body
     end)
     
     if success then
-        print("✅ CONTADOR DORADO ACTIVADO")
-        local jsonSuccess, data = pcall(function()
-            return game:GetService("HttpService"):JSONDecode(result)
-        end)
-        if jsonSuccess then
-            print("📊 Total: " .. tostring(data.stats.total))
-            print("👥 Online: " .. tostring(data.stats.online))
-            print("🎯 Tus ejecuciones: " .. tostring(data.stats.yourTotal))
-        end
+        return result
+    else
+        print("⚠️ Error en request: " .. tostring(result))
+        return nil
     end
 end
 
-local function heartbeat()
-    pcall(function()
-        game:GetService("HttpService"):RequestAsync{
-            Url = API .. "/heartbeat.js?sessionId=" .. sessionId .. "&userId=" .. player.UserId,
-            Method = "GET"
-        }
+-- 1. Registrar ejecución INICIAL
+print("📤 Registrando ejecución inicial...")
+local response = sendRequest("count.js", {
+    userId = player.UserId,
+    playerName = player.Name,
+    sessionId = sessionId,
+    gameId = game.GameId,
+    time = os.time()
+})
+
+if response then
+    print("✅ Ejecución registrada")
+    
+    -- Parsear respuesta
+    local jsonSuccess, data = pcall(function()
+        return HttpService:JSONDecode(response)
     end)
+    
+    if jsonSuccess and data.stats then
+        print("📊 Total: " .. data.stats.total)
+        print("🎯 Hoy: " .. data.stats.today)
+        print("👥 Online: " .. data.stats.online)
+        print("⭐ Únicos: " .. data.stats.unique)
+        print("🔥 Tuyas: " .. data.stats.yourTotal)
+    end
+else
+    print("⚠️ No se pudo registrar ejecución inicial")
 end
 
--- Iniciar contador
-register()
+-- 2. Obtener contador actual (para verificar)
+task.wait(2)
+print("\\n📡 Obteniendo contador actual...")
+local counter = sendRequest("counter.js", {})
+if counter then
+    local jsonSuccess, data = pcall(function()
+        return HttpService:JSONDecode(counter)
+    end)
+    
+    if jsonSuccess then
+        print("📈 CONTADOR ACTUAL:")
+        print("   Total: " .. data.total)
+        print("   Hoy: " .. data.today)
+        print("   Online: " .. data.online)
+        print("   Únicos: " .. data.unique)
+        print("   Sesiones activas: " .. tostring(data.sessionsCount or "N/A"))
+    end
+else
+    print("⚠️ No se pudo obtener contador")
+end
 
--- Heartbeat cada 30s para mantener sesión activa
+-- 3. Sistema de heartbeat MEJORADO
+print("\\n💓 Heartbeat mejorado iniciado (cada 25 segundos)")
+local heartbeatCount = 0
+local lastHeartbeatSuccess = true
+
 while true do
-    task.wait(30)
-    heartbeat()
+    task.wait(25) -- Reducido a 25 segundos para mayor seguridad
+    
+    heartbeatCount = heartbeatCount + 1
+    
+    local result = sendRequest("heartbeat.js", {
+        sessionId = sessionId,
+        userId = player.UserId
+    })
+    
+    if result then
+        local jsonSuccess, data = pcall(function()
+            return HttpService:JSONDecode(result)
+        end)
+        
+        if jsonSuccess and data.success then
+            if not lastHeartbeatSuccess then
+                print("✅ Heartbeat restaurado - Online: " .. tostring(data.online))
+                lastHeartbeatSuccess = true
+            end
+            
+            -- Mostrar progreso cada 10 heartbeats
+            if heartbeatCount % 10 == 0 then
+                print("💗 Heartbeat #" .. heartbeatCount .. " - Online: " .. data.online)
+            end
+        else
+            if lastHeartbeatSuccess then
+                print("⚠️ Heartbeat falló (intentando reconectar...)")
+                lastHeartbeatSuccess = false
+            end
+        end
+    else
+        if lastHeartbeatSuccess then
+            print("⚠️ No se pudo enviar heartbeat")
+            lastHeartbeatSuccess = false
+        end
+    end
+    
+    -- Intentar reconexión completa cada 60 heartbeats (~25 minutos)
+    if heartbeatCount % 60 == 0 then
+        print("🔄 Reconexión programada...")
+        local reconnect = sendRequest("count.js", {
+            userId = player.UserId,
+            playerName = player.Name,
+            sessionId = sessionId,
+            gameId = game.GameId,
+            reconnect = true
+        })
+        
+        if reconnect then
+            print("✅ Reconexión exitosa")
+        end
+    end
 end`;
             
             return new Response(script, {
@@ -420,25 +604,28 @@ end`;
             });
         }
         
-        // Servir el index.html
-        if (path === "/" || path === "/index.html") {
-            // Si tienes el HTML en una carpeta separada, cárgalo desde allí
-            // O si está en la misma ubicación, usa tu HTML
-            try {
-                // Reemplaza esto con la ruta correcta a tu HTML
-                const html = `TU HTML AQUÍ - PERO MEJOR SÍRVELO DESDE TU CARPETA PUBLIC`;
-                return new Response(html, {
-                    headers: {
-                        "Content-Type": "text/html; charset=UTF-8"
-                    }
-                });
-            } catch (error) {
-                return new Response(`<h1>Contador Dorado 🏆</h1><p>Sistema funcionando correctamente</p><p><a href="/api/counter.js">Ver estadísticas</a></p>`, {
-                    headers: {
-                        "Content-Type": "text/html; charset=UTF-8"
-                    }
-                });
-            }
+        // Ruta para debug
+        if (path === '/api/debug') {
+            const id = env.CONTADOR_STATS.idFromName('main');
+            const obj = env.CONTADOR_STATS.get(id);
+            const newUrl = new URL(url);
+            newUrl.pathname = '/debug';
+            return obj.fetch(newUrl);
+        }
+        
+        // Si el path es solo "/", servir página principal
+        if (path === "/") {
+            return new Response(JSON.stringify({
+                message: "Contador Dorado API",
+                endpoints: {
+                    counter: "/api/counter.js",
+                    stats: "/api/stats.js",
+                    script: "/api/script.js",
+                    debug: "/api/debug"
+                }
+            }), {
+                headers: { ...headers, 'Content-Type': 'application/json' }
+            });
         }
         
         return new Response(JSON.stringify({
@@ -449,6 +636,7 @@ end`;
                 '/api/stats.js',
                 '/api/heartbeat.js',
                 '/api/script.js',
+                '/api/debug',
                 '/'
             ]
         }), {
