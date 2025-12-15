@@ -1,4 +1,4 @@
-constructor(state, env) {
+class constructor(state, env) {
     this.state = state;
     this.storage = state.storage;
     this.env = env;
