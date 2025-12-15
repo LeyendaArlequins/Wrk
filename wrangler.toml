@@ -1,7 +1,7 @@
 name = "contador-dorado"
 main = "worker.js"
+type = "module"
 compatibility_date = "2023-12-01"
-
 # Configuración KV
 kv_namespaces = [
   { binding = "CONTADOR_KV", id = "tu-id-kv-aqui" }
