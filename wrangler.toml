@@ -1,21 +1,25 @@
 name = "contador-dorado"
-main = "worker.js"
-type = "module"
 compatibility_date = "2023-12-01"
 
-# Durable Objects
+# ================== FRONTEND ==================
+[assets]
+directory = "./public"
+
+# ================== DURABLE OBJECTS ==================
 [[durable_objects.bindings]]
 name = "CONTADOR_STATS"
 class_name = "ContadorStats"
 
 [[migrations]]
-tag = "v1"
+tag = "v2"
 new_sqlite_classes = ["ContadorStats"]
-# Rutas (opcional, solo si ya tienes dominio en Cloudflare)
-# routes = [
-#   { pattern = "contador-dorado.*", zone_name = "tudominio.com" },
-#   { pattern = "contador.*", zone_name = "tudominio.com" }
-# ]
 
+# ================== VARIABLES ==================
 [vars]
 API_VERSION = "2.0"
+
+# ================== RUTAS (opcional) ==================
+routes = [
+  { pattern = "contador-dorado.*", zone_name = "tudominio.com" },
+  { pattern = "contador.*", zone_name = "tudominio.com" }
+]
