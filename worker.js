@@ -273,7 +273,7 @@ class ContadorStats {
         
         for (const [sessionId, session] of this.stats.sessions.entries()) {
             // 90 segundos sin heartbeat = sesión muerta
-            if (now - session.lastHeartbeat > 40 * 60 * 1000) // 40 minuto {
+            if (now - session.lastHeartbeat > 15 * 60 * 1000) // 40 minuto {
                 sessionsToDelete.push(sessionId);
             }
         }
