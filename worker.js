@@ -268,15 +268,16 @@ class ContadorStats {
 
     // MEJORA: Aumentar tiempo de limpieza a 90 segundos
     cleanupSessions() {
-        const now = Date.now();
-        const sessionsToDelete = [];
-        
-        for (const [sessionId, session] of this.stats.sessions.entries()) {
-            // 90 segundos sin heartbeat = sesión muerta
-            if (now - session.lastHeartbeat > 15 * 60 * 1000) // 40 minuto {
-                sessionsToDelete.push(sessionId);
-            }
+    const now = Date.now();
+    const sessionsToDelete = [];
+    
+    for (const [sessionId, session] of this.stats.sessions.entries()) {
+        // 15 minutos sin heartbeat = sesión muerta
+        if (now - session.lastHeartbeat > 15 * 60 * 1000) {
+            sessionsToDelete.push(sessionId);
         }
+    }
+    
         
         // Eliminar sesiones muertas
         for (const sessionId of sessionsToDelete) {
