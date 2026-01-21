@@ -192,15 +192,6 @@ class ContadorStats {
         this.stats.peakOnline = this.stats.online;
     }
 }
-            
-            // Actualizar contador de online
-            this.stats.online = this.stats.sessions.size;
-            
-            if (this.stats.online > this.stats.peakOnline) {
-                this.stats.peakOnline = this.stats.online;
-            }
-        }
-        
         await this.saveStats();
         
         return {
