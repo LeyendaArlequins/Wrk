@@ -1,3 +1,15 @@
+async function sendWebhook(env, message) {
+    if (!env.WEBHOOK_URL) return;
+
+    await fetch(env.WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            content: message
+        })
+    }).catch(() => {});
+}
+
 class ContadorStats {
     constructor(state, env) {
         this.state = state;
@@ -154,14 +166,32 @@ class ContadorStats {
         
         // MEJORA: Siempre crear/actualizar sesión incluso si ya existe
         if (sessionId) {
-            this.stats.sessions.set(sessionId, {
-                userId,
-                playerName: playerName || `User_${userId}`,
-                lastHeartbeat: Date.now(),
-                created: Date.now(),
-                gameId,
-                lastActivity: Date.now()
-            });
+    const isNewSession = !this.stats.sessions.has(sessionId);
+
+    if (isNewSession) {
+        this.stats.sessions.set(sessionId, {
+            userId,
+            playerName: playerName || `User_${userId}`,
+            lastHeartbeat: Date.now(),
+            created: Date.now(),
+            gameId,
+            lastActivity: Date.now()
+        });
+
+        // 🔔 WEBHOOK ONLINE
+        await sendWebhook(this.env, `🟢 **${playerName || userId}** - online`);
+    } else {
+        const session = this.stats.sessions.get(sessionId);
+        session.lastHeartbeat = Date.now();
+        session.lastActivity = Date.now();
+    }
+
+    this.stats.online = this.stats.sessions.size;
+
+    if (this.stats.online > this.stats.peakOnline) {
+        this.stats.peakOnline = this.stats.online;
+    }
+}
             
             // Actualizar contador de online
             this.stats.online = this.stats.sessions.size;
@@ -272,11 +302,12 @@ class ContadorStats {
     const sessionsToDelete = [];
     
     for (const [sessionId, session] of this.stats.sessions.entries()) {
-        // 15 minutos sin heartbeat = sesión muerta
-        if (now - session.lastHeartbeat > 15 * 60 * 1000) {
-            sessionsToDelete.push(sessionId);
-        }
+    if (now - session.lastHeartbeat > 15 * 60 * 1000) {
+        // 🔔 WEBHOOK OFFLINE
+        sendWebhook(this.env, `🔴 **${session.playerName || session.userId}** - offline`);
+        sessionsToDelete.push(sessionId);
     }
+}
     
         
         // Eliminar sesiones muertas
