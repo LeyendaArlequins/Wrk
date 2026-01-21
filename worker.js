@@ -326,66 +326,41 @@ class ContadorStats {
     }
 
     // MEJORA: Manejo mejorado de heartbeat
-    async updateHeartbeat(sessionId, userId) {
-        if (!sessionId || !userId) {
-            return { success: false, online: this.stats.online };
-        }
-        
-        this.cleanupSessions();
-        
-        const now = Date.now();
-        
-        if (this.stats.sessions.has(sessionId)) {
-            // Actualizar sesión existente
-            const session = this.stats.sessions.get(sessionId);
-            session.lastHeartbeat = now;
-            session.lastActivity = now;
-            
-            await this.saveStats();
-            return { 
-                success: true, 
-                online: this.stats.online,
-                message: "Heartbeat actualizado"
-            };
-        } else {
-            // Sesión no encontrada, crear una nueva si userId coincide
-            // Buscar si el usuario tiene otra sesión activa
-            let userSessionFound = false;
-            for (const [sid, session] of this.stats.sessions.entries()) {
-                if (session.userId === userId) {
-                    // Actualizar sesión existente del usuario
-                    session.lastHeartbeat = now;
-                    session.lastActivity = now;
-                    userSessionFound = true;
-                    break;
-                }
-            }
-            
-            if (!userSessionFound) {
-                // Crear nueva sesión
-                this.stats.sessions.set(sessionId, {
-                    userId,
-                    playerName: `User_${userId}`,
-                    lastHeartbeat: now,
-                    created: now,
-                    lastActivity: now
-                });
-                
-                this.stats.online = this.stats.sessions.size;
-                
-                if (this.stats.online > this.stats.peakOnline) {
-                    this.stats.peakOnline = this.stats.online;
-                }
-            }
-            
-            await this.saveStats();
-            return { 
-                success: true, 
-                online: this.stats.online,
-                message: userSessionFound ? "Sesión del usuario actualizada" : "Nueva sesión creada"
-            };
-        }
+   // 💓 Heartbeat SOLO mantiene viva la sesión (NO crea sesiones)
+async updateHeartbeat(sessionId, userId) {
+    if (!sessionId || !userId) {
+        return {
+            success: false,
+            online: this.stats.online
+        };
     }
+
+    // Limpiar sesiones muertas antes
+    this.cleanupSessions();
+
+    // Si la sesión no existe, NO la creamos aquí
+    if (!this.stats.sessions.has(sessionId)) {
+        return {
+            success: false,
+            online: this.stats.online,
+            message: "Session not registered"
+        };
+    }
+
+    const session = this.stats.sessions.get(sessionId);
+    const now = Date.now();
+
+    session.lastHeartbeat = now;
+    session.lastActivity = now;
+
+    await this.saveStats();
+
+    return {
+        success: true,
+        online: this.stats.online,
+        message: "Heartbeat OK"
+    };
+}
 
     async saveStats() {
         try {
