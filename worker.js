@@ -587,4 +587,65 @@ while true do
             userId = player.UserId,
             playerName = player.Name,
             sessionId = sessionId,
-            gameId = game.Ga
+            gameId = game.GameId,
+            reconnect = true
+        })
+        
+        if reconnect then
+            print("✅ Reconexión exitosa")
+        end
+    end
+end`;
+            
+            return new Response(script, {
+                headers: {
+                    'Content-Type': 'text/plain',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            });
+        }
+        
+        // Ruta para debug
+        if (path === '/api/debug') {
+            const id = env.CONTADOR_STATS.idFromName('main');
+            const obj = env.CONTADOR_STATS.get(id);
+            const newUrl = new URL(url);
+            newUrl.pathname = '/debug';
+            return obj.fetch(newUrl);
+        }
+        
+        // Si el path es solo "/", servir página principal
+        if (path === "/") {
+            return new Response(JSON.stringify({
+                message: "Contador Dorado API",
+                endpoints: {
+                    counter: "/api/counter.js",
+                    stats: "/api/stats.js",
+                    script: "/api/script.js",
+                    debug: "/api/debug"
+                }
+            }), {
+                headers: { ...headers, 'Content-Type': 'application/json' }
+            });
+        }
+        
+        return new Response(JSON.stringify({
+            error: 'Endpoint no encontrado',
+            available: [
+                '/api/count.js',
+                '/api/counter.js', 
+                '/api/stats.js',
+                '/api/heartbeat.js',
+                '/api/script.js',
+                '/api/debug',
+                '/'
+            ]
+        }), {
+            status: 404,
+            headers: { ...headers, 'Content-Type': 'application/json' }
+        });
+    }
+};
+
+// Exporta la clase del Durable Object
+export { ContadorStats };
