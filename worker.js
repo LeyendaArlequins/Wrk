@@ -1,15 +1,3 @@
-async function sendWebhook(env, message) {
-    if (!env.WEBHOOK_URL) return;
-
-    await fetch(env.WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            content: message
-        })
-    }).catch(() => {});
-}
-
 class ContadorStats {
     constructor(state, env) {
         this.state = state;
@@ -165,32 +153,24 @@ class ContadorStats {
         }
         
         // MEJORA: Siempre crear/actualizar sesión incluso si ya existe
-      // Siempre crear sesión si no existe
-if (!sessionId) {
-    sessionId = crypto.randomUUID();
-}
-
-const isNewSession = !this.stats.sessions.has(sessionId);
-
-if (isNewSession) {
-    this.stats.sessions.set(sessionId, {
-        userId,
-        playerName: playerName || `User_${userId}`,
-        lastHeartbeat: Date.now(),
-        lastActivity: Date.now(),
-        created: Date.now(),
-        gameId
-    });
-
-    await sendWebhook(
-        this.env,
-        `🟢 **${playerName || userId}** - online`
-    );
-} else {
-    const session = this.stats.sessions.get(sessionId);
-    session.lastHeartbeat = Date.now();
-    session.lastActivity = Date.now();
-}
+        if (sessionId) {
+            this.stats.sessions.set(sessionId, {
+                userId,
+                playerName: playerName || `User_${userId}`,
+                lastHeartbeat: Date.now(),
+                created: Date.now(),
+                gameId,
+                lastActivity: Date.now()
+            });
+            
+            // Actualizar contador de online
+            this.stats.online = this.stats.sessions.size;
+            
+            if (this.stats.online > this.stats.peakOnline) {
+                this.stats.peakOnline = this.stats.online;
+            }
+        }
+        
         await this.saveStats();
         
         return {
@@ -292,12 +272,11 @@ if (isNewSession) {
     const sessionsToDelete = [];
     
     for (const [sessionId, session] of this.stats.sessions.entries()) {
-    if (now - session.lastHeartbeat > 15 * 60 * 1000) {
-        // 🔔 WEBHOOK OFFLINE
-        sendWebhook(this.env, `🔴 **${session.playerName || session.userId}** - offline`);
-        sessionsToDelete.push(sessionId);
+        // 15 minutos sin heartbeat = sesión muerta
+        if (now - session.lastHeartbeat > 15 * 60 * 1000) {
+            sessionsToDelete.push(sessionId);
+        }
     }
-}
     
         
         // Eliminar sesiones muertas
@@ -325,41 +304,66 @@ if (isNewSession) {
     }
 
     // MEJORA: Manejo mejorado de heartbeat
-   // 💓 Heartbeat SOLO mantiene viva la sesión (NO crea sesiones)
-async updateHeartbeat(sessionId, userId) {
-    if (!sessionId || !userId) {
-        return {
-            success: false,
-            online: this.stats.online
-        };
+    async updateHeartbeat(sessionId, userId) {
+        if (!sessionId || !userId) {
+            return { success: false, online: this.stats.online };
+        }
+        
+        this.cleanupSessions();
+        
+        const now = Date.now();
+        
+        if (this.stats.sessions.has(sessionId)) {
+            // Actualizar sesión existente
+            const session = this.stats.sessions.get(sessionId);
+            session.lastHeartbeat = now;
+            session.lastActivity = now;
+            
+            await this.saveStats();
+            return { 
+                success: true, 
+                online: this.stats.online,
+                message: "Heartbeat actualizado"
+            };
+        } else {
+            // Sesión no encontrada, crear una nueva si userId coincide
+            // Buscar si el usuario tiene otra sesión activa
+            let userSessionFound = false;
+            for (const [sid, session] of this.stats.sessions.entries()) {
+                if (session.userId === userId) {
+                    // Actualizar sesión existente del usuario
+                    session.lastHeartbeat = now;
+                    session.lastActivity = now;
+                    userSessionFound = true;
+                    break;
+                }
+            }
+            
+            if (!userSessionFound) {
+                // Crear nueva sesión
+                this.stats.sessions.set(sessionId, {
+                    userId,
+                    playerName: `User_${userId}`,
+                    lastHeartbeat: now,
+                    created: now,
+                    lastActivity: now
+                });
+                
+                this.stats.online = this.stats.sessions.size;
+                
+                if (this.stats.online > this.stats.peakOnline) {
+                    this.stats.peakOnline = this.stats.online;
+                }
+            }
+            
+            await this.saveStats();
+            return { 
+                success: true, 
+                online: this.stats.online,
+                message: userSessionFound ? "Sesión del usuario actualizada" : "Nueva sesión creada"
+            };
+        }
     }
-
-    // Limpiar sesiones muertas antes
-    this.cleanupSessions();
-
-    // Si la sesión no existe, NO la creamos aquí
-    if (!this.stats.sessions.has(sessionId)) {
-        return {
-            success: false,
-            online: this.stats.online,
-            message: "Session not registered"
-        };
-    }
-
-    const session = this.stats.sessions.get(sessionId);
-    const now = Date.now();
-
-    session.lastHeartbeat = now;
-    session.lastActivity = now;
-
-    await this.saveStats();
-
-    return {
-        success: true,
-        online: this.stats.online,
-        message: "Heartbeat OK"
-    };
-}
 
     async saveStats() {
         try {
@@ -583,65 +587,4 @@ while true do
             userId = player.UserId,
             playerName = player.Name,
             sessionId = sessionId,
-            gameId = game.GameId,
-            reconnect = true
-        })
-        
-        if reconnect then
-            print("✅ Reconexión exitosa")
-        end
-    end
-end`;
-            
-            return new Response(script, {
-                headers: {
-                    'Content-Type': 'text/plain',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
-        }
-        
-        // Ruta para debug
-        if (path === '/api/debug') {
-            const id = env.CONTADOR_STATS.idFromName('main');
-            const obj = env.CONTADOR_STATS.get(id);
-            const newUrl = new URL(url);
-            newUrl.pathname = '/debug';
-            return obj.fetch(newUrl);
-        }
-        
-        // Si el path es solo "/", servir página principal
-        if (path === "/") {
-            return new Response(JSON.stringify({
-                message: "Contador Dorado API",
-                endpoints: {
-                    counter: "/api/counter.js",
-                    stats: "/api/stats.js",
-                    script: "/api/script.js",
-                    debug: "/api/debug"
-                }
-            }), {
-                headers: { ...headers, 'Content-Type': 'application/json' }
-            });
-        }
-        
-        return new Response(JSON.stringify({
-            error: 'Endpoint no encontrado',
-            available: [
-                '/api/count.js',
-                '/api/counter.js', 
-                '/api/stats.js',
-                '/api/heartbeat.js',
-                '/api/script.js',
-                '/api/debug',
-                '/'
-            ]
-        }), {
-            status: 404,
-            headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-    }
-};
-
-// Exporta la clase del Durable Object
-export { ContadorStats };
+            gameId = game.Ga
