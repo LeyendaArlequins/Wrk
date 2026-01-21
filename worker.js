@@ -165,32 +165,31 @@ class ContadorStats {
         }
         
         // MEJORA: Siempre crear/actualizar sesión incluso si ya existe
-        if (sessionId) {
-    const isNewSession = !this.stats.sessions.has(sessionId);
+      // Siempre crear sesión si no existe
+if (!sessionId) {
+    sessionId = crypto.randomUUID();
+}
 
-    if (isNewSession) {
-        this.stats.sessions.set(sessionId, {
-            userId,
-            playerName: playerName || `User_${userId}`,
-            lastHeartbeat: Date.now(),
-            created: Date.now(),
-            gameId,
-            lastActivity: Date.now()
-        });
+const isNewSession = !this.stats.sessions.has(sessionId);
 
-        // 🔔 WEBHOOK ONLINE
-        await sendWebhook(this.env, `🟢 **${playerName || userId}** - online`);
-    } else {
-        const session = this.stats.sessions.get(sessionId);
-        session.lastHeartbeat = Date.now();
-        session.lastActivity = Date.now();
-    }
+if (isNewSession) {
+    this.stats.sessions.set(sessionId, {
+        userId,
+        playerName: playerName || `User_${userId}`,
+        lastHeartbeat: Date.now(),
+        lastActivity: Date.now(),
+        created: Date.now(),
+        gameId
+    });
 
-    this.stats.online = this.stats.sessions.size;
-
-    if (this.stats.online > this.stats.peakOnline) {
-        this.stats.peakOnline = this.stats.online;
-    }
+    await sendWebhook(
+        this.env,
+        `🟢 **${playerName || userId}** - online`
+    );
+} else {
+    const session = this.stats.sessions.get(sessionId);
+    session.lastHeartbeat = Date.now();
+    session.lastActivity = Date.now();
 }
         await this.saveStats();
         
