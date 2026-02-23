@@ -2,7 +2,7 @@ class ContadorStats {
     constructor(state, env) {
         this.state = state;
         this.storage = state.storage;
-        this.env = env; // Guardar env para usarlo después
+        this.env = env;
 
         state.blockConcurrencyWhile(async () => {
             const saved = await this.storage.get("stats");
@@ -27,8 +27,7 @@ class ContadorStats {
                     peakOnline: 0,
                     peakToday: 0,
                     lastReset: new Date().toDateString(),
-                    requestsCount: 0,
-                    peakOnlineNotified: 0
+                    requestsCount: 0
                 };
             }
         });
@@ -81,13 +80,9 @@ class ContadorStats {
             return new Response(JSON.stringify(result), { headers });
             
         } catch (error) {
-            // Log del error completo para debugging
-            console.error('Error en Durable Object:', error);
-            
             return new Response(JSON.stringify({ 
                 error: 'Error interno',
-                message: error.message,
-                stack: error.stack // Solo para debugging, quitar en producción
+                message: error.message 
             }), {
                 status: 500,
                 headers
@@ -95,180 +90,133 @@ class ContadorStats {
         }
     }
 
-    // Función para enviar notificación a webhook
+    // Función simplificada para webhook
     async notifyWebhook(peakOnline) {
-        // Verificar que env existe
-        if (!this.env) {
-            console.log('⚠️ this.env no está disponible en el Durable Object');
-            return false;
-        }
-
-        const webhookUrl = this.env.WEBHOOKONLINE_URL;
+        const webhookUrl = this.env?.WEBHOOK_URL;
         
         if (!webhookUrl) {
-            console.log('⚠️ No webhook URL configured in secrets');
             return false;
         }
 
+        // Versión SIMPLE sin embeds (más compatible)
         const message = {
-            content: null,
-            embeds: [{
-                title: '🏆 online',
-                description: `Se ha alcanzado un nuevo máximo de **${peakOnline}** usuarios conectados simultáneamente.`,
-                color: 0xFFD700,
-                fields: [
-                    {
-                        name: '📊 Estadísticas actuales',
-                        value: `Total ejecuciones: ${this.stats.total}\nHoy: ${this.stats.today}\nUsuarios únicos: ${this.stats.uniqueUsers.size}`,
-                        inline: true
-                    },
-                    {
-                        name: '⏰ Timestamp',
-                        value: `<t:${Math.floor(Date.now() / 1000)}:F>`,
-                        inline: true
-                    }
-                ],
-                timestamp: new Date().toISOString(),
-                footer: {
-                    text: 'zl online'
-                }
-            }]
+            content: `🏆 **NUEVO RÉCORD: ${peakOnline} usuarios online!** 🏆\n📊 Total: ${this.stats.total} | Hoy: ${this.stats.today} | Únicos: ${this.stats.uniqueUsers.size}`
         };
 
         try {
-            const response = await fetch(webhookUrl, {
+            await fetch(webhookUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(message)
             });
-
-            if (response.ok) {
-                console.log(`✅ Webhook enviado: Nuevo récord de ${peakOnline} usuarios online`);
-                return true;
-            } else {
-                const errorText = await response.text();
-                console.error(`❌ Error enviando webhook: ${response.status} - ${errorText}`);
-                return false;
-            }
+            return true;
         } catch (error) {
-            console.error('❌ Error en webhook:', error.message);
             return false;
         }
     }
 
     async incrementCounters({ userId, playerName, sessionId, gameId }) {
-        try {
-            this.cleanupSessions();
-            this.checkDailyReset();
-            
-            const now = new Date();
-            const today = now.toDateString();
-            const hour = now.getHours();
-            const hourKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-${hour}`;
-            
-            this.stats.total++;
-            this.stats.today++;
-            this.stats.requestsCount++;
-            
-            if (this.stats.today > this.stats.peakToday) {
-                this.stats.peakToday = this.stats.today;
-            }
-            
-            // Actualizar estadísticas por hora
-            if (!this.stats.hourlyStats.has(hourKey)) {
-                this.stats.hourlyStats.set(hourKey, {
-                    hour: hourKey,
-                    count: 1,
-                    timestamp: now.toISOString()
-                });
-            } else {
-                const hourStat = this.stats.hourlyStats.get(hourKey);
-                hourStat.count++;
-                hourStat.timestamp = now.toISOString();
-            }
-            
-            // Actualizar estadísticas diarias
-            if (!this.stats.dailyStats.has(today)) {
-                this.stats.dailyStats.set(today, {
-                    date: today,
-                    count: 1,
-                    uniqueUsers: new Set([userId])
-                });
-            } else {
-                const dayStat = this.stats.dailyStats.get(today);
-                dayStat.count++;
-                dayStat.uniqueUsers.add(userId);
-            }
-            
-            const userKey = `user_${userId}`;
-            if (!this.stats.uniqueUsers.has(userKey)) {
-                this.stats.uniqueUsers.set(userKey, {
-                    userId,
-                    playerName: playerName || `User_${userId}`,
-                    firstSeen: now.toISOString(),
-                    lastSeen: now.toISOString(),
-                    totalExecutions: 1,
-                    sessions: [sessionId]
-                });
-            } else {
-                const user = this.stats.uniqueUsers.get(userKey);
-                user.totalExecutions++;
-                user.lastSeen = now.toISOString();
-                if (!user.sessions.includes(sessionId)) {
-                    user.sessions.push(sessionId);
-                }
-            }
-            
-            // Actualizar sesión
-            if (sessionId) {
-                this.stats.sessions.set(sessionId, {
-                    userId,
-                    playerName: playerName || `User_${userId}`,
-                    lastHeartbeat: Date.now(),
-                    created: Date.now(),
-                    gameId,
-                    lastActivity: Date.now()
-                });
-                
-                // Actualizar contador de online
-                this.stats.online = this.stats.sessions.size;
-                
-                // Verificar nuevo récord
-                if (this.stats.online > this.stats.peakOnline) {
-                    const oldPeak = this.stats.peakOnline;
-                    this.stats.peakOnline = this.stats.online;
-                    
-                    console.log(`🏆 Nuevo récord! ${oldPeak} -> ${this.stats.peakOnline}`);
-                    
-                    // Notificar solo si es un récord significativamente mayor
-                    if (this.stats.peakOnline > this.stats.peakOnlineNotified) {
-                        // Usar waitUntil para no bloquear la respuesta
-                        this.state.waitUntil(this.notifyWebhook(this.stats.peakOnline));
-                        this.stats.peakOnlineNotified = this.stats.peakOnline;
-                    }
-                }
-            }
-            
-            await this.saveStats();
-            
-            return {
-                success: true,
-                stats: {
-                    total: this.stats.total,
-                    today: this.stats.today,
-                    online: this.stats.online,
-                    unique: this.stats.uniqueUsers.size,
-                    yourTotal: this.stats.uniqueUsers.get(userKey)?.totalExecutions || 1,
-                    peakOnline: this.stats.peakOnline
-                },
-                timestamp: now.toISOString()
-            };
-        } catch (error) {
-            console.error('Error en incrementCounters:', error);
-            throw error; // Re-lanzar para que el fetch lo maneje
+        this.cleanupSessions();
+        this.checkDailyReset();
+        
+        const now = new Date();
+        const today = now.toDateString();
+        const hour = now.getHours();
+        const hourKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-${hour}`;
+        
+        this.stats.total++;
+        this.stats.today++;
+        this.stats.requestsCount++;
+        
+        if (this.stats.today > this.stats.peakToday) {
+            this.stats.peakToday = this.stats.today;
         }
+        
+        // Actualizar estadísticas por hora
+        if (!this.stats.hourlyStats.has(hourKey)) {
+            this.stats.hourlyStats.set(hourKey, {
+                hour: hourKey,
+                count: 1,
+                timestamp: now.toISOString()
+            });
+        } else {
+            const hourStat = this.stats.hourlyStats.get(hourKey);
+            hourStat.count++;
+            hourStat.timestamp = now.toISOString();
+        }
+        
+        // Actualizar estadísticas diarias
+        if (!this.stats.dailyStats.has(today)) {
+            this.stats.dailyStats.set(today, {
+                date: today,
+                count: 1,
+                uniqueUsers: new Set([userId])
+            });
+        } else {
+            const dayStat = this.stats.dailyStats.get(today);
+            dayStat.count++;
+            dayStat.uniqueUsers.add(userId);
+        }
+        
+        const userKey = `user_${userId}`;
+        if (!this.stats.uniqueUsers.has(userKey)) {
+            this.stats.uniqueUsers.set(userKey, {
+                userId,
+                playerName: playerName || `User_${userId}`,
+                firstSeen: now.toISOString(),
+                lastSeen: now.toISOString(),
+                totalExecutions: 1,
+                sessions: [sessionId]
+            });
+        } else {
+            const user = this.stats.uniqueUsers.get(userKey);
+            user.totalExecutions++;
+            user.lastSeen = now.toISOString();
+            if (!user.sessions.includes(sessionId)) {
+                user.sessions.push(sessionId);
+            }
+        }
+        
+        if (sessionId) {
+            this.stats.sessions.set(sessionId, {
+                userId,
+                playerName: playerName || `User_${userId}`,
+                lastHeartbeat: Date.now(),
+                created: Date.now(),
+                gameId,
+                lastActivity: Date.now()
+            });
+            
+            // Actualizar contador de online
+            const oldOnline = this.stats.online;
+            this.stats.online = this.stats.sessions.size;
+            
+            // Verificar nuevo récord
+            if (this.stats.online > this.stats.peakOnline) {
+                this.stats.peakOnline = this.stats.online;
+                
+                // ENVIAR WEBBHOOK INMEDIATAMENTE (sin waitUntil para probar)
+                if (this.env?.WEBHOOK_URL) {
+                    // No await para no bloquear
+                    this.notifyWebhook(this.stats.peakOnline).catch(() => {});
+                }
+            }
+        }
+        
+        await this.saveStats();
+        
+        return {
+            success: true,
+            stats: {
+                total: this.stats.total,
+                today: this.stats.today,
+                online: this.stats.online,
+                unique: this.stats.uniqueUsers.size,
+                yourTotal: this.stats.uniqueUsers.get(userKey)?.totalExecutions || 1,
+                peakOnline: this.stats.peakOnline
+            },
+            timestamp: now.toISOString()
+        };
     }
 
     async getCounterStats() {
@@ -335,8 +283,7 @@ class ContadorStats {
                 peakToday: this.stats.peakToday,
                 requestsCount: this.stats.requestsCount,
                 lastReset: this.stats.lastReset,
-                activeSessions: this.stats.sessions.size,
-                peakOnlineNotified: this.stats.peakOnlineNotified
+                activeSessions: this.stats.sessions.size
             },
             hourly: hourlyData,
             daily: dailyData,
@@ -380,71 +327,64 @@ class ContadorStats {
     }
 
     async updateHeartbeat(sessionId, userId) {
-        try {
-            if (!sessionId || !userId) {
-                return { success: false, online: this.stats.online };
+        if (!sessionId || !userId) {
+            return { success: false, online: this.stats.online };
+        }
+        
+        this.cleanupSessions();
+        
+        const now = Date.now();
+        
+        if (this.stats.sessions.has(sessionId)) {
+            const session = this.stats.sessions.get(sessionId);
+            session.lastHeartbeat = now;
+            session.lastActivity = now;
+            
+            await this.saveStats();
+            return { 
+                success: true, 
+                online: this.stats.online,
+                message: "Heartbeat actualizado"
+            };
+        } else {
+            let userSessionFound = false;
+            for (const [sid, session] of this.stats.sessions.entries()) {
+                if (session.userId === userId) {
+                    session.lastHeartbeat = now;
+                    session.lastActivity = now;
+                    userSessionFound = true;
+                    break;
+                }
             }
             
-            this.cleanupSessions();
-            
-            const now = Date.now();
-            
-            if (this.stats.sessions.has(sessionId)) {
-                const session = this.stats.sessions.get(sessionId);
-                session.lastHeartbeat = now;
-                session.lastActivity = now;
+            if (!userSessionFound) {
+                this.stats.sessions.set(sessionId, {
+                    userId,
+                    playerName: `User_${userId}`,
+                    lastHeartbeat: now,
+                    created: now,
+                    lastActivity: now
+                });
                 
-                await this.saveStats();
-                return { 
-                    success: true, 
-                    online: this.stats.online,
-                    message: "Heartbeat actualizado"
-                };
-            } else {
-                let userSessionFound = false;
-                for (const [sid, session] of this.stats.sessions.entries()) {
-                    if (session.userId === userId) {
-                        session.lastHeartbeat = now;
-                        session.lastActivity = now;
-                        userSessionFound = true;
-                        break;
+                const oldOnline = this.stats.online;
+                this.stats.online = this.stats.sessions.size;
+                
+                if (this.stats.online > this.stats.peakOnline) {
+                    this.stats.peakOnline = this.stats.online;
+                    
+                    // ENVIAR WEBBHOOK también desde heartbeat
+                    if (this.env?.WEBHOOK_URL) {
+                        this.notifyWebhook(this.stats.peakOnline).catch(() => {});
                     }
                 }
-                
-                if (!userSessionFound) {
-                    this.stats.sessions.set(sessionId, {
-                        userId,
-                        playerName: `User_${userId}`,
-                        lastHeartbeat: now,
-                        created: now,
-                        lastActivity: now
-                    });
-                    
-                    this.stats.online = this.stats.sessions.size;
-                    
-                    if (this.stats.online > this.stats.peakOnline) {
-                        const oldPeak = this.stats.peakOnline;
-                        this.stats.peakOnline = this.stats.online;
-                        
-                        console.log(`🏆 Nuevo récord desde heartbeat! ${oldPeak} -> ${this.stats.peakOnline}`);
-                        
-                        if (this.stats.peakOnline > this.stats.peakOnlineNotified) {
-                            this.state.waitUntil(this.notifyWebhook(this.stats.peakOnline));
-                            this.stats.peakOnlineNotified = this.stats.peakOnline;
-                        }
-                    }
-                }
-                
-                await this.saveStats();
-                return { 
-                    success: true, 
-                    online: this.stats.online,
-                    message: userSessionFound ? "Sesión del usuario actualizada" : "Nueva sesión creada"
-                };
             }
-        } catch (error) {
-            console.error('Error en updateHeartbeat:', error);
-            throw error;
+            
+            await this.saveStats();
+            return { 
+                success: true, 
+                online: this.stats.online,
+                message: userSessionFound ? "Sesión del usuario actualizada" : "Nueva sesión creada"
+            };
         }
     }
 
@@ -467,7 +407,6 @@ class ContadorStats {
             await this.storage.put('stats', toSave);
             return true;
         } catch (error) {
-            console.error('Error guardando stats:', error);
             return false;
         }
     }
@@ -521,20 +460,15 @@ export default {
             if (path === '/api/script' || path === '/api/script.js') {
                 const baseUrl = `https://${url.hostname}`;
                 
-                const script = `-- 🏆 CONTADOR DORADO - SISTEMA MEJORADO 🏆
--- URL: ${baseUrl}
-
+                const script = `-- 🏆 CONTADOR DORADO 🏆
 local HttpService = game:GetService("HttpService")
 local player = game.Players.LocalPlayer
 
 local API = "${baseUrl}/api"
 local sessionId = "S_" .. player.UserId .. "_" .. math.random(1000,9999)
 
-print("🏆 CONTADOR DORADO - SISTEMA MEJORADO")
-
 local function sendRequest(endpoint, params)
     local url = API .. endpoint .. "?"
-    
     for k, v in pairs(params or {}) do
         url = url .. k .. "=" .. HttpService:UrlEncode(tostring(v)) .. "&"
     end
@@ -543,96 +477,33 @@ local function sendRequest(endpoint, params)
         local req = HttpService:RequestAsync({
             Url = url:sub(1, -2),
             Method = "GET",
-            Headers = {
-                ["Cache-Control"] = "no-cache"
-            }
+            Headers = { ["Cache-Control"] = "no-cache" }
         })
         return req.Body
     end)
     
-    if success then
-        return result
-    else
-        print("⚠️ Error en request: " .. tostring(result))
-        return nil
-    end
+    return success and result or nil
 end
 
--- Registrar ejecución INICIAL
-print("📤 Registrando ejecución inicial...")
+-- Registrar
 local response = sendRequest("count.js", {
     userId = player.UserId,
     playerName = player.Name,
     sessionId = sessionId,
-    gameId = game.GameId,
-    time = os.time()
+    gameId = game.GameId
 })
 
 if response then
-    print("✅ Ejecución registrada")
-    
-    local jsonSuccess, data = pcall(function()
-        return HttpService:JSONDecode(response)
-    end)
-    
-    if jsonSuccess and data.stats then
-        print("📊 Total: " .. data.stats.total)
-        print("🎯 Hoy: " .. data.stats.today)
-        print("👥 Online: " .. data.stats.online)
-        print("⭐ Únicos: " .. data.stats.unique)
-        print("🔥 Tuyas: " .. data.stats.yourTotal)
-        print("🏆 Récord online: " .. (data.stats.peakOnline or "N/A"))
-    end
-else
-    print("⚠️ No se pudo registrar ejecución inicial")
+    print("✅ Conectado - Enviando heartbeats...")
 end
 
--- Obtener contador actual
-task.wait(2)
-print("\\n📡 Obteniendo contador actual...")
-local counter = sendRequest("counter.js", {})
-if counter then
-    local jsonSuccess, data = pcall(function()
-        return HttpService:JSONDecode(counter)
-    end)
-    
-    if jsonSuccess then
-        print("📈 CONTADOR ACTUAL:")
-        print("   Total: " .. data.total)
-        print("   Hoy: " .. data.today)
-        print("   Online: " .. data.online)
-        print("   Únicos: " .. data.unique)
-        print("   Récord online: " .. data.peakOnline)
-    end
-else
-    print("⚠️ No se pudo obtener contador")
-end
-
--- Sistema de heartbeat
-print("\\n💓 Heartbeat iniciado (cada 25 segundos)")
-local heartbeatCount = 0
-
+-- Heartbeat
 while true do
-    task.wait(25)
-    
-    heartbeatCount = heartbeatCount + 1
-    
-    local result = sendRequest("heartbeat.js", {
+    task.wait(30)
+    sendRequest("heartbeat.js", {
         sessionId = sessionId,
         userId = player.UserId
     })
-    
-    if result then
-        local jsonSuccess, data = pcall(function()
-            return HttpService:JSONDecode(result)
-        end)
-        
-        if jsonSuccess and data.success then
-            if heartbeatCount % 10 == 0 then
-                print("💗 Heartbeat #" .. heartbeatCount .. " - Online: " .. data.online)
-            end
-        end
-    end
 end`;
                 
                 return new Response(script, {
@@ -646,37 +517,22 @@ end`;
             if (path === '/') {
                 return new Response(JSON.stringify({
                     message: "Contador Dorado API",
-                    endpoints: {
-                        counter: "/api/counter.js",
-                        stats: "/api/stats.js",
-                        script: "/api/script.js"
-                    }
+                    webhook: env.WEBHOOKONLINE_URL ? "✅ Configurado" : "❌ No configurado"
                 }), {
                     headers: { ...headers, 'Content-Type': 'application/json' }
                 });
             }
             
             return new Response(JSON.stringify({
-                error: 'Endpoint no encontrado',
-                available: [
-                    '/api/count.js',
-                    '/api/counter.js', 
-                    '/api/stats.js',
-                    '/api/heartbeat.js',
-                    '/api/script.js',
-                    '/'
-                ]
+                error: 'Endpoint no encontrado'
             }), {
                 status: 404,
                 headers: { ...headers, 'Content-Type': 'application/json' }
             });
             
         } catch (error) {
-            console.error('Error en worker principal:', error);
-            
             return new Response(JSON.stringify({
-                error: 'Error interno del servidor',
-                message: error.message
+                error: 'Error interno'
             }), {
                 status: 500,
                 headers: { ...headers, 'Content-Type': 'application/json' }
