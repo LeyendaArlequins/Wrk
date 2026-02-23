@@ -93,7 +93,7 @@ class ContadorStats {
 
     // NUEVO: Función para enviar notificación a webhook
     async notifyWebhook(peakOnline) {
-        const webhookUrl = this.env.WEBHOOK_URL;
+        const webhookUrl = this.env.WEBHOOKONLINE_URL;
         
         if (!webhookUrl) {
             console.log('⚠️ No webhook URL configured in secrets');
@@ -103,7 +103,7 @@ class ContadorStats {
         const message = {
             content: null,
             embeds: [{
-                title: '🏆 ¡NUEVO RÉCORD DE USUARIOS ONLINE! 🏆',
+                title: '🏆 usuarios online ',
                 description: `Se ha alcanzado un nuevo máximo de **${peakOnline}** usuarios conectados simultáneamente.`,
                 color: 0xFFD700, // Dorado
                 fields: [
@@ -120,7 +120,7 @@ class ContadorStats {
                 ],
                 timestamp: new Date().toISOString(),
                 footer: {
-                    text: 'Contador Dorado - Sistema de Estadísticas'
+                    text: 'zl pvp'
                 }
             }]
         };
