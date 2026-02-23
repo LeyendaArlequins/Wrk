@@ -27,7 +27,8 @@ class ContadorStats {
                     peakOnline: 0,
                     peakToday: 0,
                     lastReset: new Date().toDateString(),
-                    requestsCount: 0
+                    requestsCount: 0,
+                    peakOnlineNotified: 0 // Para evitar notificaciones duplicadas
                 };
             }
         });
@@ -87,6 +88,62 @@ class ContadorStats {
                 status: 500,
                 headers
             });
+        }
+    }
+
+    // NUEVO: Función para enviar notificación a webhook
+    async notifyWebhook(peakOnline) {
+        const webhookUrl = this.env.WEBHOOK_URL;
+        
+        if (!webhookUrl) {
+            console.log('⚠️ No webhook URL configured in secrets');
+            return false;
+        }
+
+        const message = {
+            content: null,
+            embeds: [{
+                title: '🏆 ¡NUEVO RÉCORD DE USUARIOS ONLINE! 🏆',
+                description: `Se ha alcanzado un nuevo máximo de **${peakOnline}** usuarios conectados simultáneamente.`,
+                color: 0xFFD700, // Dorado
+                fields: [
+                    {
+                        name: '📊 Estadísticas actuales',
+                        value: `Total ejecuciones: ${this.stats.total}\nHoy: ${this.stats.today}\nUsuarios únicos: ${this.stats.uniqueUsers.size}`,
+                        inline: true
+                    },
+                    {
+                        name: '⏰ Timestamp',
+                        value: `<t:${Math.floor(Date.now() / 1000)}:F>`,
+                        inline: true
+                    }
+                ],
+                timestamp: new Date().toISOString(),
+                footer: {
+                    text: 'Contador Dorado - Sistema de Estadísticas'
+                }
+            }]
+        };
+
+        try {
+            const response = await fetch(webhookUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(message)
+            });
+
+            if (response.ok) {
+                console.log(`✅ Webhook enviado: Nuevo récord de ${peakOnline} usuarios online`);
+                return true;
+            } else {
+                console.error(`❌ Error enviando webhook: ${response.status}`);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Error en webhook:', error.message);
+            return false;
         }
     }
 
@@ -166,8 +223,16 @@ class ContadorStats {
             // Actualizar contador de online
             this.stats.online = this.stats.sessions.size;
             
+            // Verificar si se alcanzó un nuevo récord
             if (this.stats.online > this.stats.peakOnline) {
                 this.stats.peakOnline = this.stats.online;
+                
+                // NUEVO: Notificar si es un récord significativamente mayor
+                // Solo notificar si es al menos 1 más que el último notificado
+                if (this.stats.peakOnline > this.stats.peakOnlineNotified) {
+                    await this.notifyWebhook(this.stats.peakOnline);
+                    this.stats.peakOnlineNotified = this.stats.peakOnline;
+                }
             }
         }
         
@@ -180,7 +245,8 @@ class ContadorStats {
                 today: this.stats.today,
                 online: this.stats.online,
                 unique: this.stats.uniqueUsers.size,
-                yourTotal: this.stats.uniqueUsers.get(userKey)?.totalExecutions || 1
+                yourTotal: this.stats.uniqueUsers.get(userKey)?.totalExecutions || 1,
+                peakOnline: this.stats.peakOnline
             },
             timestamp: now.toISOString()
         };
@@ -254,7 +320,8 @@ class ContadorStats {
                 peakToday: this.stats.peakToday,
                 requestsCount: this.stats.requestsCount,
                 lastReset: this.stats.lastReset,
-                activeSessions: this.stats.sessions.size
+                activeSessions: this.stats.sessions.size,
+                peakOnlineNotified: this.stats.peakOnlineNotified // Para debug
             },
             hourly: hourlyData,
             daily: dailyData,
@@ -266,18 +333,16 @@ class ContadorStats {
         };
     }
 
-    // MEJORA: Aumentar tiempo de limpieza a 90 segundos
     cleanupSessions() {
-    const now = Date.now();
-    const sessionsToDelete = [];
-    
-    for (const [sessionId, session] of this.stats.sessions.entries()) {
-        // 15 minutos sin heartbeat = sesión muerta
-        if (now - session.lastHeartbeat > 15 * 60 * 1000) {
-            sessionsToDelete.push(sessionId);
+        const now = Date.now();
+        const sessionsToDelete = [];
+        
+        for (const [sessionId, session] of this.stats.sessions.entries()) {
+            // 15 minutos sin heartbeat = sesión muerta
+            if (now - session.lastHeartbeat > 15 * 60 * 1000) {
+                sessionsToDelete.push(sessionId);
+            }
         }
-    }
-    
         
         // Eliminar sesiones muertas
         for (const sessionId of sessionsToDelete) {
@@ -303,7 +368,6 @@ class ContadorStats {
         }
     }
 
-    // MEJORA: Manejo mejorado de heartbeat
     async updateHeartbeat(sessionId, userId) {
         if (!sessionId || !userId) {
             return { success: false, online: this.stats.online };
@@ -351,8 +415,15 @@ class ContadorStats {
                 
                 this.stats.online = this.stats.sessions.size;
                 
+                // Verificar si se alcanzó un nuevo récord
                 if (this.stats.online > this.stats.peakOnline) {
                     this.stats.peakOnline = this.stats.online;
+                    
+                    // NUEVO: Notificar nuevo récord desde heartbeat también
+                    if (this.stats.peakOnline > this.stats.peakOnlineNotified) {
+                        await this.notifyWebhook(this.stats.peakOnline);
+                        this.stats.peakOnlineNotified = this.stats.peakOnline;
+                    }
                 }
             }
             
@@ -511,6 +582,7 @@ if response then
         print("👥 Online: " .. data.stats.online)
         print("⭐ Únicos: " .. data.stats.unique)
         print("🔥 Tuyas: " .. data.stats.yourTotal)
+        print("🏆 Récord online: " .. (data.stats.peakOnline or "N/A"))
     end
 else
     print("⚠️ No se pudo registrar ejecución inicial")
@@ -531,6 +603,7 @@ if counter then
         print("   Hoy: " .. data.today)
         print("   Online: " .. data.online)
         print("   Únicos: " .. data.unique)
+        print("   Récord online: " .. data.peakOnline)
         print("   Sesiones activas: " .. tostring(data.sessionsCount or "N/A"))
     end
 else
