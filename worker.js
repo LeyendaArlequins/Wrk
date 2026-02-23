@@ -103,7 +103,7 @@ class ContadorStats {
             return false;
         }
 
-        const webhookUrl = this.env.WEBHOOK_URL;
+        const webhookUrl = this.env.WEBHOOKONLINE_URL;
         
         if (!webhookUrl) {
             console.log('⚠️ No webhook URL configured in secrets');
