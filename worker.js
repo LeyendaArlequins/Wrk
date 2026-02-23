@@ -90,31 +90,6 @@ class ContadorStats {
         }
     }
 
-    // Función simplificada para webhook
-    async notifyWebhook(peakOnline) {
-        const webhookUrl = this.env?.WEBHOOK_URL;
-        
-        if (!webhookUrl) {
-            return false;
-        }
-
-        // Versión SIMPLE sin embeds (más compatible)
-        const message = {
-            content: `🏆 **NUEVO RÉCORD: ${peakOnline} usuarios online!** 🏆\n📊 Total: ${this.stats.total} | Hoy: ${this.stats.today} | Únicos: ${this.stats.uniqueUsers.size}`
-        };
-
-        try {
-            await fetch(webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(message)
-            });
-            return true;
-        } catch (error) {
-            return false;
-        }
-    }
-
     async incrementCounters({ userId, playerName, sessionId, gameId }) {
         this.cleanupSessions();
         this.checkDailyReset();
@@ -177,6 +152,7 @@ class ContadorStats {
             }
         }
         
+        // MEJORA: Siempre crear/actualizar sesión incluso si ya existe
         if (sessionId) {
             this.stats.sessions.set(sessionId, {
                 userId,
@@ -188,18 +164,10 @@ class ContadorStats {
             });
             
             // Actualizar contador de online
-            const oldOnline = this.stats.online;
             this.stats.online = this.stats.sessions.size;
             
-            // Verificar nuevo récord
             if (this.stats.online > this.stats.peakOnline) {
                 this.stats.peakOnline = this.stats.online;
-                
-                // ENVIAR WEBBHOOK INMEDIATAMENTE (sin waitUntil para probar)
-                if (this.env?.WEBHOOK_URL) {
-                    // No await para no bloquear
-                    this.notifyWebhook(this.stats.peakOnline).catch(() => {});
-                }
             }
         }
         
@@ -212,14 +180,14 @@ class ContadorStats {
                 today: this.stats.today,
                 online: this.stats.online,
                 unique: this.stats.uniqueUsers.size,
-                yourTotal: this.stats.uniqueUsers.get(userKey)?.totalExecutions || 1,
-                peakOnline: this.stats.peakOnline
+                yourTotal: this.stats.uniqueUsers.get(userKey)?.totalExecutions || 1
             },
             timestamp: now.toISOString()
         };
     }
 
     async getCounterStats() {
+        // Siempre limpiar sesiones antes de devolver datos
         this.cleanupSessions();
         this.checkDailyReset();
         
@@ -231,7 +199,7 @@ class ContadorStats {
             peakOnline: this.stats.peakOnline,
             peakToday: this.stats.peakToday,
             lastUpdate: new Date().toISOString(),
-            sessionsCount: this.stats.sessions.size
+            sessionsCount: this.stats.sessions.size // Para debug
         };
     }
 
@@ -239,6 +207,7 @@ class ContadorStats {
         this.cleanupSessions();
         this.checkDailyReset();
         
+        // Obtener últimas 12 horas
         const now = new Date();
         const hourlyData = [];
         for (let i = 11; i >= 0; i--) {
@@ -254,6 +223,7 @@ class ContadorStats {
             });
         }
         
+        // Obtener últimos 7 días
         const dailyData = [];
         for (let i = 6; i >= 0; i--) {
             const day = new Date(now);
@@ -262,12 +232,13 @@ class ContadorStats {
             const dayStat = this.stats.dailyStats.get(dayKey);
             
             dailyData.push({
-                date: dayKey.substring(4, 10),
+                date: dayKey.substring(4, 10), // Formato corto: "Dec 15"
                 count: dayStat ? dayStat.count : 0,
                 unique: dayStat ? dayStat.uniqueUsers.size : 0
             });
         }
         
+        // Calcular estadísticas por hora actual
         const currentHour = new Date();
         currentHour.setMinutes(0, 0, 0);
         const currentHourKey = `${currentHour.getFullYear()}-${currentHour.getMonth()+1}-${currentHour.getDate()}-${currentHour.getHours()}`;
@@ -295,22 +266,28 @@ class ContadorStats {
         };
     }
 
+    // MEJORA: Aumentar tiempo de limpieza a 90 segundos
     cleanupSessions() {
-        const now = Date.now();
-        const sessionsToDelete = [];
-        
-        for (const [sessionId, session] of this.stats.sessions.entries()) {
-            if (now - session.lastHeartbeat > 15 * 60 * 1000) {
-                sessionsToDelete.push(sessionId);
-            }
+    const now = Date.now();
+    const sessionsToDelete = [];
+    
+    for (const [sessionId, session] of this.stats.sessions.entries()) {
+        // 15 minutos sin heartbeat = sesión muerta
+        if (now - session.lastHeartbeat > 15 * 60 * 1000) {
+            sessionsToDelete.push(sessionId);
         }
+    }
+    
         
+        // Eliminar sesiones muertas
         for (const sessionId of sessionsToDelete) {
             this.stats.sessions.delete(sessionId);
         }
         
+        // Actualizar contador de online
         this.stats.online = this.stats.sessions.size;
         
+        // Si eliminamos sesiones, guardar cambios
         if (sessionsToDelete.length > 0) {
             this.saveStats().catch(console.error);
         }
@@ -326,6 +303,7 @@ class ContadorStats {
         }
     }
 
+    // MEJORA: Manejo mejorado de heartbeat
     async updateHeartbeat(sessionId, userId) {
         if (!sessionId || !userId) {
             return { success: false, online: this.stats.online };
@@ -336,6 +314,7 @@ class ContadorStats {
         const now = Date.now();
         
         if (this.stats.sessions.has(sessionId)) {
+            // Actualizar sesión existente
             const session = this.stats.sessions.get(sessionId);
             session.lastHeartbeat = now;
             session.lastActivity = now;
@@ -347,9 +326,12 @@ class ContadorStats {
                 message: "Heartbeat actualizado"
             };
         } else {
+            // Sesión no encontrada, crear una nueva si userId coincide
+            // Buscar si el usuario tiene otra sesión activa
             let userSessionFound = false;
             for (const [sid, session] of this.stats.sessions.entries()) {
                 if (session.userId === userId) {
+                    // Actualizar sesión existente del usuario
                     session.lastHeartbeat = now;
                     session.lastActivity = now;
                     userSessionFound = true;
@@ -358,6 +340,7 @@ class ContadorStats {
             }
             
             if (!userSessionFound) {
+                // Crear nueva sesión
                 this.stats.sessions.set(sessionId, {
                     userId,
                     playerName: `User_${userId}`,
@@ -366,16 +349,10 @@ class ContadorStats {
                     lastActivity: now
                 });
                 
-                const oldOnline = this.stats.online;
                 this.stats.online = this.stats.sessions.size;
                 
                 if (this.stats.online > this.stats.peakOnline) {
                     this.stats.peakOnline = this.stats.online;
-                    
-                    // ENVIAR WEBBHOOK también desde heartbeat
-                    if (this.env?.WEBHOOK_URL) {
-                        this.notifyWebhook(this.stats.peakOnline).catch(() => {});
-                    }
                 }
             }
             
@@ -390,6 +367,7 @@ class ContadorStats {
 
     async saveStats() {
         try {
+            // Convertir Maps a objetos para almacenamiento
             const toSave = {
                 ...this.stats,
                 uniqueUsers: Object.fromEntries(this.stats.uniqueUsers),
@@ -398,15 +376,24 @@ class ContadorStats {
                 dailyStats: Object.fromEntries(this.stats.dailyStats.entries())
             };
             
+            // Convertir Sets a arrays para dailyStats
             for (const [key, value] of Object.entries(toSave.dailyStats || {})) {
                 if (value.uniqueUsers && value.uniqueUsers instanceof Set) {
                     value.uniqueUsers = Array.from(value.uniqueUsers);
                 }
             }
             
+            // Convertir arrays de sesiones en usuarios
+            for (const [key, user] of Object.entries(toSave.uniqueUsers || {})) {
+                if (user.sessions && Array.isArray(user.sessions)) {
+                    // Mantener como array
+                }
+            }
+            
             await this.storage.put('stats', toSave);
             return true;
         } catch (error) {
+            console.error('Error guardando stats:', error);
             return false;
         }
     }
@@ -429,46 +416,54 @@ export default {
             return new Response(null, { headers });
         }
 
-        try {
-            const id = env.CONTADOR_STATS.idFromName('main');
-            const obj = env.CONTADOR_STATS.get(id);
+        const id = env.CONTADOR_STATS.idFromName('main');
+        const obj = env.CONTADOR_STATS.get(id);
+        
+        // Manejar ambas versiones: con y sin .js
+        if (path === '/api/count' || path === '/api/count.js') {
+            const newUrl = new URL(url);
+            newUrl.pathname = '/increment';
+            return obj.fetch(newUrl);
+        }
+        
+        if (path === '/api/counter' || path === '/api/counter.js') {
+            const newUrl = new URL(url);
+            newUrl.pathname = '/counter';
+            return obj.fetch(newUrl);
+        }
+        
+        if (path === '/api/stats' || path === '/api/stats.js') {
+            const newUrl = new URL(url);
+            newUrl.pathname = '/stats';
+            return obj.fetch(newUrl);
+        }
+        
+        if (path === '/api/heartbeat' || path === '/api/heartbeat.js') {
+            const newUrl = new URL(url);
+            newUrl.pathname = '/heartbeat';
+            return obj.fetch(newUrl);
+        }
+        
+        // Script para Roblox - MEJORADO
+        if (path === '/api/script' || path === '/api/script.js') {
+            const baseUrl = `https://${url.hostname}`;
             
-            if (path === '/api/count' || path === '/api/count.js') {
-                const newUrl = new URL(url);
-                newUrl.pathname = '/increment';
-                return obj.fetch(newUrl);
-            }
-            
-            if (path === '/api/counter' || path === '/api/counter.js') {
-                const newUrl = new URL(url);
-                newUrl.pathname = '/counter';
-                return obj.fetch(newUrl);
-            }
-            
-            if (path === '/api/stats' || path === '/api/stats.js') {
-                const newUrl = new URL(url);
-                newUrl.pathname = '/stats';
-                return obj.fetch(newUrl);
-            }
-            
-            if (path === '/api/heartbeat' || path === '/api/heartbeat.js') {
-                const newUrl = new URL(url);
-                newUrl.pathname = '/heartbeat';
-                return obj.fetch(newUrl);
-            }
-            
-            if (path === '/api/script' || path === '/api/script.js') {
-                const baseUrl = `https://${url.hostname}`;
-                
-                const script = `-- 🏆 CONTADOR DORADO 🏆
+            const script = `-- 🏆 CONTADOR DORADO - SISTEMA MEJORADO 🏆
+-- Estado PERSISTENTE con mejor manejo de sesiones
+-- URL: ${baseUrl}
+
 local HttpService = game:GetService("HttpService")
 local player = game.Players.LocalPlayer
 
 local API = "${baseUrl}/api"
 local sessionId = "S_" .. player.UserId .. "_" .. math.random(1000,9999)
 
+print("🏆 CONTADOR DORADO - SISTEMA MEJORADO")
+
+-- Función para enviar requests con mejor manejo de errores
 local function sendRequest(endpoint, params)
     local url = API .. endpoint .. "?"
+    
     for k, v in pairs(params or {}) do
         url = url .. k .. "=" .. HttpService:UrlEncode(tostring(v)) .. "&"
     end
@@ -477,68 +472,180 @@ local function sendRequest(endpoint, params)
         local req = HttpService:RequestAsync({
             Url = url:sub(1, -2),
             Method = "GET",
-            Headers = { ["Cache-Control"] = "no-cache" }
+            Headers = {
+                ["Cache-Control"] = "no-cache"
+            }
         })
         return req.Body
     end)
     
-    return success and result or nil
+    if success then
+        return result
+    else
+        print("⚠️ Error en request: " .. tostring(result))
+        return nil
+    end
 end
 
--- Registrar
+-- 1. Registrar ejecución INICIAL
+print("📤 Registrando ejecución inicial...")
 local response = sendRequest("count.js", {
     userId = player.UserId,
     playerName = player.Name,
     sessionId = sessionId,
-    gameId = game.GameId
+    gameId = game.GameId,
+    time = os.time()
 })
 
 if response then
-    print("✅ Conectado - Enviando heartbeats...")
+    print("✅ Ejecución registrada")
+    
+    -- Parsear respuesta
+    local jsonSuccess, data = pcall(function()
+        return HttpService:JSONDecode(response)
+    end)
+    
+    if jsonSuccess and data.stats then
+        print("📊 Total: " .. data.stats.total)
+        print("🎯 Hoy: " .. data.stats.today)
+        print("👥 Online: " .. data.stats.online)
+        print("⭐ Únicos: " .. data.stats.unique)
+        print("🔥 Tuyas: " .. data.stats.yourTotal)
+    end
+else
+    print("⚠️ No se pudo registrar ejecución inicial")
 end
 
--- Heartbeat
+-- 2. Obtener contador actual (para verificar)
+task.wait(2)
+print("\\n📡 Obteniendo contador actual...")
+local counter = sendRequest("counter.js", {})
+if counter then
+    local jsonSuccess, data = pcall(function()
+        return HttpService:JSONDecode(counter)
+    end)
+    
+    if jsonSuccess then
+        print("📈 CONTADOR ACTUAL:")
+        print("   Total: " .. data.total)
+        print("   Hoy: " .. data.today)
+        print("   Online: " .. data.online)
+        print("   Únicos: " .. data.unique)
+        print("   Sesiones activas: " .. tostring(data.sessionsCount or "N/A"))
+    end
+else
+    print("⚠️ No se pudo obtener contador")
+end
+
+-- 3. Sistema de heartbeat MEJORADO
+print("\\n💓 Heartbeat mejorado iniciado (cada 25 segundos)")
+local heartbeatCount = 0
+local lastHeartbeatSuccess = true
+
 while true do
-    task.wait(30)
-    sendRequest("heartbeat.js", {
+    task.wait(25) -- Reducido a 25 segundos para mayor seguridad
+    
+    heartbeatCount = heartbeatCount + 1
+    
+    local result = sendRequest("heartbeat.js", {
         sessionId = sessionId,
         userId = player.UserId
     })
+    
+    if result then
+        local jsonSuccess, data = pcall(function()
+            return HttpService:JSONDecode(result)
+        end)
+        
+        if jsonSuccess and data.success then
+            if not lastHeartbeatSuccess then
+                print("✅ Heartbeat restaurado - Online: " .. tostring(data.online))
+                lastHeartbeatSuccess = true
+            end
+            
+            -- Mostrar progreso cada 10 heartbeats
+            if heartbeatCount % 10 == 0 then
+                print("💗 Heartbeat #" .. heartbeatCount .. " - Online: " .. data.online)
+            end
+        else
+            if lastHeartbeatSuccess then
+                print("⚠️ Heartbeat falló (intentando reconectar...)")
+                lastHeartbeatSuccess = false
+            end
+        end
+    else
+        if lastHeartbeatSuccess then
+            print("⚠️ No se pudo enviar heartbeat")
+            lastHeartbeatSuccess = false
+        end
+    end
+    
+    -- Intentar reconexión completa cada 60 heartbeats (~25 minutos)
+    if heartbeatCount % 60 == 0 then
+        print("🔄 Reconexión programada...")
+        local reconnect = sendRequest("count.js", {
+            userId = player.UserId,
+            playerName = player.Name,
+            sessionId = sessionId,
+            gameId = game.GameId,
+            reconnect = true
+        })
+        
+        if reconnect then
+            print("✅ Reconexión exitosa")
+        end
+    end
 end`;
-                
-                return new Response(script, {
-                    headers: {
-                        'Content-Type': 'text/plain',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
-            }
             
-            if (path === '/') {
-                return new Response(JSON.stringify({
-                    message: "Contador Dorado API",
-                    webhook: env.WEBHOOKONLINE_URL ? "✅ Configurado" : "❌ No configurado"
-                }), {
-                    headers: { ...headers, 'Content-Type': 'application/json' }
-                });
-            }
-            
-            return new Response(JSON.stringify({
-                error: 'Endpoint no encontrado'
-            }), {
-                status: 404,
-                headers: { ...headers, 'Content-Type': 'application/json' }
+            return new Response(script, {
+                headers: {
+                    'Content-Type': 'text/plain',
+                    'Access-Control-Allow-Origin': '*'
+                }
             });
-            
-        } catch (error) {
+        }
+        
+        // Ruta para debug
+        if (path === '/api/debug') {
+            const id = env.CONTADOR_STATS.idFromName('main');
+            const obj = env.CONTADOR_STATS.get(id);
+            const newUrl = new URL(url);
+            newUrl.pathname = '/debug';
+            return obj.fetch(newUrl);
+        }
+        
+        // Si el path es solo "/", servir página principal
+        if (path === "/") {
             return new Response(JSON.stringify({
-                error: 'Error interno'
+                message: "Contador Dorado API",
+                endpoints: {
+                    counter: "/api/counter.js",
+                    stats: "/api/stats.js",
+                    script: "/api/script.js",
+                    debug: "/api/debug"
+                }
             }), {
-                status: 500,
                 headers: { ...headers, 'Content-Type': 'application/json' }
             });
         }
+        
+        return new Response(JSON.stringify({
+            error: 'Endpoint no encontrado',
+            available: [
+                '/api/count.js',
+                '/api/counter.js', 
+                '/api/stats.js',
+                '/api/heartbeat.js',
+                '/api/script.js',
+                '/api/debug',
+                '/'
+            ]
+        }), {
+            status: 404,
+            headers: { ...headers, 'Content-Type': 'application/json' }
+        });
     }
 };
 
+// Exporta la clase del Durable Object
 export { ContadorStats };
