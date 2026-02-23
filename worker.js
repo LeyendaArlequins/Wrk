@@ -113,7 +113,7 @@ class ContadorStats {
         const message = {
             content: null,
             embeds: [{
-                title: '🏆 ¡NUEVO RÉCORD DE USUARIOS ONLINE! 🏆',
+                title: '🏆 online',
                 description: `Se ha alcanzado un nuevo máximo de **${peakOnline}** usuarios conectados simultáneamente.`,
                 color: 0xFFD700,
                 fields: [
@@ -130,7 +130,7 @@ class ContadorStats {
                 ],
                 timestamp: new Date().toISOString(),
                 footer: {
-                    text: 'Contador Dorado - Sistema de Estadísticas'
+                    text: 'zl online'
                 }
             }]
         };
