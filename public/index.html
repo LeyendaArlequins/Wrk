@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🏆 ZL PvP | STATS </title>
+    <title>🏆 ZL PvP | STATS EN VIVO</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -18,7 +18,8 @@
             --dark-gold: #FFA500;
             --bg-dark: #0a0a0a;
             --bg-darker: #050505;
-            --card-bg: rgba(26, 26, 26, 0.9);
+            --card-bg: rgba(26, 26, 26, 0.95);
+            --glow: 0 0 20px rgba(255, 215, 0, 0.3);
         }
 
         body {
@@ -27,12 +28,13 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: var(--gold);
             overflow-x: hidden;
+            position: relative;
         }
 
         /* Partículas doradas */
         .gold-particle {
-            position: absolute;
-            background: radial-gradient(circle, rgba(255,215,0,0.8) 0%, rgba(255,215,0,0) 70%);
+            position: fixed;
+            background: radial-gradient(circle, rgba(255,215,0,0.6) 0%, rgba(255,215,0,0) 70%);
             border-radius: 50%;
             pointer-events: none;
             z-index: 1;
@@ -51,55 +53,61 @@
         .header {
             text-align: center;
             margin-bottom: 3rem;
-            padding: 2rem;
-            background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.1), transparent);
-            border-radius: 20px;
-            border: 2px solid rgba(255, 215, 0, 0.2);
+            padding: 2.5rem;
+            background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.15), transparent);
+            border-radius: 30px;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            backdrop-filter: blur(5px);
+            box-shadow: var(--glow);
         }
 
         .title {
-            background: linear-gradient(to right, var(--gold), var(--dark-gold), var(--gold));
+            background: linear-gradient(to right, #FFF, var(--gold), #FFF);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
-            font-size: 3.5rem;
-            font-weight: 800;
+            font-size: 4rem;
+            font-weight: 900;
             margin-bottom: 1rem;
-            text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+            letter-spacing: 2px;
         }
 
         .subtitle {
-            color: rgba(255, 215, 0, 0.8);
-            font-size: 1.2rem;
-            letter-spacing: 2px;
+            color: rgba(255, 215, 0, 0.9);
+            font-size: 1.3rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
         }
 
         /* Stats Grid */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 2rem;
             margin-bottom: 3rem;
         }
 
         .stat-card {
             background: var(--card-bg);
-            border: 2px solid rgba(255, 215, 0, 0.3);
-            border-radius: 20px;
-            padding: 2.5rem;
+            border: 2px solid rgba(255, 215, 0, 0.4);
+            border-radius: 25px;
+            padding: 2rem;
             text-align: center;
             backdrop-filter: blur(10px);
-            transition: transform 0.3s, box-shadow 0.3s;
+            transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
         }
 
         .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 40px rgba(255, 215, 0, 0.2);
+            transform: translateY(-8px) scale(1.02);
+            border-color: var(--gold);
+            box-shadow: 0 15px 40px rgba(255, 215, 0, 0.3);
         }
 
-        .stat-card::before {
+        .stat-card::after {
             content: '';
             position: absolute;
             top: -50%;
@@ -112,31 +120,36 @@
                 rgba(255, 215, 0, 0.1),
                 transparent 30%
             );
-            animation: rotate 10s linear infinite;
+            animation: rotate 8s linear infinite;
+            pointer-events: none;
         }
 
         .stat-value {
-            font-size: 4.5rem;
-            font-weight: 800;
-            background: linear-gradient(45deg, var(--gold), var(--dark-gold));
+            font-size: 4rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--gold), #FFF);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
-            margin-bottom: 1rem;
-            text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+            margin: 0.5rem 0;
+            text-shadow: var(--glow);
+            position: relative;
+            z-index: 2;
         }
 
         .stat-label {
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             color: rgba(255, 215, 0, 0.9);
             text-transform: uppercase;
-            letter-spacing: 3px;
+            letter-spacing: 2px;
+            font-weight: 600;
         }
 
         .stat-icon {
             font-size: 2.5rem;
-            margin-bottom: 1rem;
             color: var(--gold);
+            margin-bottom: 0.5rem;
+            filter: drop-shadow(0 0 10px rgba(255,215,0,0.5));
         }
 
         /* Charts Section */
@@ -150,9 +163,10 @@
         .chart-container {
             background: var(--card-bg);
             border: 2px solid rgba(255, 215, 0, 0.3);
-            border-radius: 20px;
+            border-radius: 25px;
             padding: 2rem;
             backdrop-filter: blur(10px);
+            box-shadow: var(--glow);
         }
 
         .chart-title {
@@ -163,17 +177,20 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         /* Script Section */
         .script-section {
             background: var(--card-bg);
             border: 2px solid rgba(255, 215, 0, 0.3);
-            border-radius: 20px;
+            border-radius: 25px;
             padding: 2.5rem;
             margin-bottom: 3rem;
             backdrop-filter: blur(10px);
+            box-shadow: var(--glow);
         }
 
         .section-title {
@@ -186,18 +203,19 @@
         }
 
         .script-code {
-            background: rgba(0, 0, 0, 0.7);
-            border: 1px solid rgba(255, 215, 0, 0.2);
-            border-radius: 10px;
+            background: #1a1a1a;
+            border: 1px solid var(--gold);
+            border-radius: 15px;
             padding: 2rem;
-            font-family: 'Courier New', monospace;
-            font-size: 1.1rem;
-            color: var(--gold);
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 1rem;
+            color: #FFD700;
             line-height: 1.6;
             overflow-x: auto;
             white-space: pre-wrap;
             margin-bottom: 1.5rem;
-            border-left: 4px solid var(--gold);
+            border-left: 5px solid var(--gold);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
         }
 
         .buttons {
@@ -209,7 +227,7 @@
         .btn {
             padding: 1rem 2rem;
             border: none;
-            border-radius: 10px;
+            border-radius: 12px;
             font-size: 1.1rem;
             font-weight: 600;
             cursor: pointer;
@@ -217,26 +235,31 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .btn-primary {
             background: linear-gradient(45deg, var(--gold), var(--dark-gold));
             color: #000;
+            border: 1px solid #FFF;
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255, 215, 0, 0.5);
         }
 
         .btn-secondary {
-            background: rgba(255, 215, 0, 0.1);
+            background: transparent;
             color: var(--gold);
             border: 2px solid var(--gold);
         }
 
         .btn-secondary:hover {
-            background: rgba(255, 215, 0, 0.2);
+            background: rgba(255, 215, 0, 0.15);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.3);
         }
 
         /* Footer */
@@ -244,8 +267,10 @@
             text-align: center;
             padding: 2rem;
             color: rgba(255, 215, 0, 0.7);
-            font-size: 0.9rem;
+            font-size: 1rem;
             border-top: 1px solid rgba(255, 215, 0, 0.2);
+            background: rgba(0,0,0,0.3);
+            border-radius: 15px;
         }
 
         /* Animations */
@@ -255,11 +280,22 @@
 
         @keyframes pulse {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+            50% { opacity: 0.6; }
         }
 
         .pulse {
             animation: pulse 2s infinite;
+        }
+
+        .online-badge {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #00ff00;
+            border-radius: 50%;
+            margin-right: 8px;
+            box-shadow: 0 0 10px #00ff00;
+            animation: pulse 1.5s infinite;
         }
 
         /* Responsive */
@@ -280,12 +316,13 @@
                 grid-template-columns: 1fr;
             }
             
-            .chart-container {
-                min-width: 100%;
+            .stat-value {
+                font-size: 3rem;
             }
             
-            .stat-value {
-                font-size: 3.5rem;
+            .script-code {
+                font-size: 0.9rem;
+                padding: 1rem;
             }
         }
     </style>
@@ -299,7 +336,7 @@
         <!-- Header -->
         <header class="header">
             <h1 class="title"><i class="fas fa-crown"></i> ⚜️ ZL | STATS</h1>
-            <p class="subtitle">ESTADÍSTICAS EN TIEMPO REAL PARA ROBLOX</p>
+            <p class="subtitle">⚡ ESTADÍSTICAS EN TIEMPO REAL PARA ROBLOX ⚡</p>
         </header>
 
         <!-- Stats Grid -->
@@ -319,49 +356,95 @@
             <div class="stat-card">
                 <div class="stat-icon"><i class="fas fa-users"></i></div>
                 <div class="stat-value" id="online">0</div>
-                <div class="stat-label">EN LÍNEA</div>
+                <div class="stat-label">EN LÍNEA AHORA</div>
             </div>
             
             <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-user-plus"></i></div>
-                <div class="stat-value" id="unique">0</div>
-                <div class="stat-label">USUARIOS ÚNICOS</div>
-            </div>
-
-            <div class="stat-card">
                 <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
-                <div class="stat-value" id="hourly">0</div>
-                <div class="stat-label">POR HORA</div>
+                <div class="stat-value" id="peakOnline">0</div>
+                <div class="stat-label">RÉCORD ONLINE</div>
             </div>
 
             <div class="stat-card">
                 <div class="stat-icon"><i class="fas fa-trophy"></i></div>
-                <div class="stat-value" id="peak">0</div>
-                <div class="stat-label">RÉCORD ONLINE</div>
+                <div class="stat-value" id="peakToday">0</div>
+                <div class="stat-label">PICO DE HOY</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                <div class="stat-value" id="hourly">0</div>
+                <div class="stat-label">MAX POR HORA</div>
             </div>
         </div>
 
         <!-- Charts Section -->
         <div class="charts-section">
             <div class="chart-container">
-                <h3 class="chart-title"><i class="fas fa-chart-bar"></i> ACTIVIDAD POR HORA</h3>
+                <h3 class="chart-title"><i class="fas fa-chart-bar"></i> ONLINE POR HORA (Últimas 12h)</h3>
                 <canvas id="hourlyChart"></canvas>
+                <p style="color: rgba(255,215,0,0.6); text-align: center; margin-top: 1rem;">
+                    <i class="fas fa-info-circle"></i> Máximo de jugadores concurrentes por hora
+                </p>
             </div>
             
             <div class="chart-container">
-                <h3 class="chart-title"><i class="fas fa-chart-line"></i> ESTADÍSTICAS DIARIAS</h3>
-                <canvas id="dailyChart"></canvas>
+                <h3 class="chart-title"><i class="fas fa-chart-line"></i> ONLINE EN TIEMPO REAL</h3>
+                <canvas id="realtimeChart"></canvas>
+                <p style="color: rgba(255,215,0,0.6); text-align: center; margin-top: 1rem;">
+                    <i class="fas fa-circle" style="color: #00ff00;"></i> Actualización cada 3 segundos
+                </p>
             </div>
         </div>
 
         <!-- Script Section -->
         <div class="script-section">
-            <h2 class="section-title"><i class="fas fa-code"></i> CÓDIGO PARA ROBLOX</h2>
+            <h2 class="section-title"><i class="fas fa-code"></i> 📜 CÓDIGO PARA ROBLOX</h2>
             
             <div class="script-code" id="scriptCode">
+-- 🏆 ZL CONTADOR - SCRIPT OPTIMIZADO 🏆
+local HttpService = game:GetService("HttpService")
+local player = game.Players.LocalPlayer
 
-                ZL CONTADOR
+local API = "https://" .. HttpService:UrlEncode("tu-dominio.workers.dev") .. "/api"
+local sessionId = "S_" .. player.UserId .. "_" .. math.random(1000, 9999)
 
+print("⚡ Conectando a ZL Stats...")
+
+local function sendRequest(endpoint, params)
+    local url = API .. endpoint .. "?"
+    for k, v in pairs(params or {}) do
+        url = url .. k .. "=" .. HttpService:UrlEncode(tostring(v)) .. "&"
+    end
+    
+    local success, result = pcall(function()
+        return HttpService:RequestAsync({
+            Url = url:sub(1, -2),
+            Method = "GET",
+            Timeout = 5
+        })
+    end)
+    
+    if success and result then
+        return result.Body
+    end
+    return nil
+end
+
+-- Registro inicial
+local response = sendRequest("/count.js", {sessionId = sessionId})
+if response then
+    local data = HttpService:JSONDecode(response)
+    if data.stats then
+        print("✅ Conectado | Online: " .. data.stats.online)
+    end
+end
+
+-- Heartbeat cada 30 segundos
+while true do
+    task.wait(30)
+    sendRequest("/heartbeat.js", {sessionId = sessionId})
+end
             </div>
             
             <div class="buttons">
@@ -369,373 +452,244 @@
                     <i class="fas fa-copy"></i> Copiar Script
                 </button>
                 <button class="btn btn-secondary" onclick="updateStats()">
-                    <i class="fas fa-sync-alt"></i> Actualizar
+                    <i class="fas fa-sync-alt"></i> Actualizar Ahora
                 </button>
-                <button class="btn btn-secondary" onclick="showStats()">
-                    <i class="fas fa-chart-pie"></i> Ver Estadísticas
+                <button class="btn btn-secondary" onclick="window.open('/api/online-history.js', '_blank')">
+                    <i class="fas fa-history"></i> Ver Historial API
                 </button>
             </div>
         </div>
 
         <!-- Footer -->
         <footer class="footer">
-            <p><i class="fas fa-heart" style="color: #ff4444;"></i> Contador Dorado v2.0 | Estadísticas en tiempo real</p>
-            <p>Actualizado: <span id="lastUpdate">--:--:--</span> | <span id="status" class="pulse">🟢 Conectado</span></p>
+            <p><i class="fas fa-heart" style="color: #ff4444;"></i> ZL Contador v3.0 | Estadísticas en tiempo real</p>
+            <p>
+                <span class="online-badge"></span>
+                <span id="status">CONECTADO</span> | 
+                Última actualización: <span id="lastUpdate">--:--:--</span>
+            </p>
+            <p style="font-size: 0.9rem; margin-top: 0.5rem;">
+                <i class="fas fa-database"></i> Total requests: <span id="requestsCount">0</span>
+            </p>
         </footer>
     </div>
 
     <script>
         // Variables globales
-        let hourlyChart, dailyChart;
+        let hourlyChart, realtimeChart;
         let currentUrl = window.location.origin;
+        let statsHistory = [];
 
-        // Inicializar partículas
+        // Crear partículas
         function createParticles() {
             const particles = document.getElementById('particles');
-            const particleCount = 25;
-            
-            for (let i = 0; i < particleCount; i++) {
+            for (let i = 0; i < 30; i++) {
                 const particle = document.createElement('div');
-                particle.classList.add('gold-particle');
-                
-                const size = Math.random() * 80 + 20;
-                particle.style.width = `${size}px`;
-                particle.style.height = `${size}px`;
-                particle.style.left = `${Math.random() * 100}vw`;
-                particle.style.top = `${Math.random() * 100}vh`;
-                particle.style.opacity = Math.random() * 0.2 + 0.1;
-                
-                particle.animate([
-                    { transform: 'translate(0, 0) rotate(0deg)', opacity: particle.style.opacity },
-                    { 
-                        transform: `translate(${Math.random() * 100 - 50}px, ${Math.random() * 100 - 50}px) rotate(${Math.random() * 360}deg)`,
-                        opacity: Math.random() * 0.1
-                    }
-                ], {
-                    duration: Math.random() * 15000 + 5000,
-                    iterations: Infinity,
-                    direction: 'alternate'
-                });
-                
+                particle.className = 'gold-particle';
+                const size = Math.random() * 100 + 30;
+                particle.style.width = size + 'px';
+                particle.style.height = size + 'px';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.top = Math.random() * 100 + '%';
+                particle.style.animation = `float ${Math.random() * 20 + 10}s infinite alternate`;
                 particles.appendChild(particle);
             }
         }
 
         // Formatear números
         function formatNumber(num) {
+            if (num === undefined || num === null) return '0';
             return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
-        // Actualizar contador principal
-        async function updateCounter() {
+        // Actualizar stats
+        async function updateStats() {
             try {
                 const response = await fetch('/api/counter.js');
                 const data = await response.json();
                 
-                // Actualizar valores principales
                 document.getElementById('total').textContent = formatNumber(data.total);
                 document.getElementById('today').textContent = formatNumber(data.today);
                 document.getElementById('online').textContent = formatNumber(data.online);
-                document.getElementById('unique').textContent = formatNumber(data.unique);
+                document.getElementById('peakOnline').textContent = formatNumber(data.peakOnline || 0);
+                document.getElementById('peakToday').textContent = formatNumber(data.peakToday || 0);
+                
+                // Guardar histórico para gráfico en tiempo real
+                statsHistory.push({
+                    time: new Date().toLocaleTimeString(),
+                    online: data.online || 0
+                });
+                if (statsHistory.length > 20) statsHistory.shift();
+                
+                updateRealtimeChart();
+                
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-                
-                // Actualizar peaks si existen
-                if (data.peakOnline) {
-                    document.getElementById('peak').textContent = formatNumber(data.peakOnline);
-                }
-                
-                // Efecto visual
-                const counter = document.getElementById('total');
-                counter.style.transform = 'scale(1.05)';
-                setTimeout(() => counter.style.transform = 'scale(1)', 300);
-                
-                // Actualizar script con URL actual
-                const scriptCode = document.getElementById('scriptCode');
-                if (scriptCode) {
-                    scriptCode.textContent = scriptCode.textContent.replace(
-                        /https:\/\/[^/]+/g,
-                        currentUrl
-                    );
-                }
+                document.getElementById('status').innerHTML = '🟢 CONECTADO';
                 
                 return data;
             } catch (error) {
-                console.error('Error actualizando contador:', error);
-                const statusElement = document.getElementById('status');
-                if (statusElement) {
-                    statusElement.innerHTML = '🔴 Desconectado';
-                    statusElement.style.color = '#ff4444';
-                }
+                console.error('Error:', error);
+                document.getElementById('status').innerHTML = '🔴 DESCONECTADO';
             }
         }
 
-        // Obtener estadísticas detalladas (con gráficos)
+        // Obtener stats detalladas
         async function getDetailedStats() {
             try {
                 const response = await fetch('/api/stats.js');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
                 const data = await response.json();
                 
-                // Actualizar estadística por hora
-                const hourlyElement = document.getElementById('hourly');
-                if (hourlyElement && data.hourly && data.hourly.length > 0) {
-                    const latestHour = data.hourly[data.hourly.length - 1];
-                    hourlyElement.textContent = formatNumber(latestHour.count);
+                // Actualizar hora actual
+                if (data.summary) {
+                    document.getElementById('requestsCount').textContent = formatNumber(data.summary.requestsCount || 0);
                 }
                 
-                // Actualizar gráficos si existen
-                updateCharts(data);
+                // Actualizar gráfico por hora
+                if (data.hourly && hourlyChart) {
+                    const hours = data.hourly.map(h => h.hour);
+                    const onlineValues = data.hourly.map(h => h.maxOnline || 0);
+                    
+                    // Calcular máximo de la última hora para el card
+                    const lastHour = data.hourly[data.hourly.length - 1];
+                    document.getElementById('hourly').textContent = formatNumber(lastHour?.maxOnline || 0);
+                    
+                    hourlyChart.data.labels = hours;
+                    hourlyChart.data.datasets[0].data = onlineValues;
+                    hourlyChart.update();
+                }
                 
                 return data;
             } catch (error) {
-                console.error('Error obteniendo estadísticas:', error);
-                return null;
+                console.error('Error stats detalladas:', error);
             }
         }
 
         // Inicializar gráficos
         function initCharts() {
-            const hourlyCanvas = document.getElementById('hourlyChart');
-            const dailyCanvas = document.getElementById('dailyChart');
-            
-            if (!hourlyCanvas || !dailyCanvas) {
-                console.log('Canvas no encontrados, omitiendo gráficos');
-                return;
-            }
-            
-            const hourlyCtx = hourlyCanvas.getContext('2d');
-            const dailyCtx = dailyCanvas.getContext('2d');
-            
             // Gráfico por hora
+            const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');
             hourlyChart = new Chart(hourlyCtx, {
                 type: 'line',
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Ejecuciones por Hora',
+                        label: 'Jugadores Online (máximo por hora)',
                         data: [],
                         borderColor: '#FFD700',
-                        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                        backgroundColor: 'rgba(255, 215, 0, 0.2)',
                         borderWidth: 3,
                         fill: true,
-                        tension: 0.4
+                        tension: 0.3,
+                        pointBackgroundColor: '#FFD700',
+                        pointBorderColor: '#000'
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            labels: { color: '#FFD700' }
+                            labels: { color: '#FFD700', font: { size: 12 } }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
                             grid: { color: 'rgba(255, 215, 0, 0.1)' },
-                            ticks: { color: '#FFD700' }
+                            ticks: { color: '#FFD700', stepSize: 1 }
                         },
                         x: {
                             grid: { color: 'rgba(255, 215, 0, 0.1)' },
-                            ticks: { color: '#FFD700' }
+                            ticks: { color: '#FFD700', maxRotation: 45 }
                         }
                     }
                 }
             });
-            
-            // Gráfico diario
-            dailyChart = new Chart(dailyCtx, {
-                type: 'bar',
+
+            // Gráfico en tiempo real
+            const realtimeCtx = document.getElementById('realtimeChart').getContext('2d');
+            realtimeChart = new Chart(realtimeCtx, {
+                type: 'line',
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Ejecuciones Diarias',
+                        label: 'Online Ahora',
                         data: [],
-                        backgroundColor: 'rgba(255, 215, 0, 0.6)',
-                        borderColor: '#FFD700',
-                        borderWidth: 2
+                        borderColor: '#00ff00',
+                        backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.2
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 0 },
                     plugins: {
-                        legend: {
-                            labels: { color: '#FFD700' }
-                        }
+                        legend: { labels: { color: '#00ff00' } }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            grid: { color: 'rgba(255, 215, 0, 0.1)' },
-                            ticks: { color: '#FFD700' }
+                            grid: { color: 'rgba(0, 255, 0, 0.1)' },
+                            ticks: { color: '#00ff00', stepSize: 1 }
                         },
                         x: {
-                            grid: { color: 'rgba(255, 215, 0, 0.1)' },
-                            ticks: { color: '#FFD700' }
+                            grid: { color: 'rgba(0, 255, 0, 0.1)' },
+                            ticks: { color: '#00ff00', maxRotation: 45 }
                         }
                     }
                 }
             });
         }
 
-        // Actualizar gráficos
-        function updateCharts(statsData) {
-            if (!statsData || !hourlyChart || !dailyChart) return;
+        // Actualizar gráfico en tiempo real
+        function updateRealtimeChart() {
+            if (!realtimeChart) return;
             
-            // Actualizar gráfico por hora
-            if (statsData.hourly && statsData.hourly.length > 0) {
-                const last12Hours = statsData.hourly.slice(-12);
-                hourlyChart.data.labels = last12Hours.map(h => h.hour || '');
-                hourlyChart.data.datasets[0].data = last12Hours.map(h => h.count || 0);
-                hourlyChart.update('none');
-            }
-            
-            // Actualizar gráfico diario
-            if (statsData.daily && statsData.daily.length > 0) {
-                dailyChart.data.labels = statsData.daily.map(d => d.date || '');
-                dailyChart.data.datasets[0].data = statsData.daily.map(d => d.count || 0);
-                dailyChart.update('none');
-            }
+            realtimeChart.data.labels = statsHistory.map(s => s.time);
+            realtimeChart.data.datasets[0].data = statsHistory.map(s => s.online);
+            realtimeChart.update();
         }
 
         // Copiar script
         async function copyScript() {
-            const scriptCode = document.getElementById('scriptCode');
-            if (!scriptCode) return;
+            const scriptText = document.getElementById('scriptCode').textContent;
+            await navigator.clipboard.writeText(scriptText);
             
-            try {
-                await navigator.clipboard.writeText(scriptCode.textContent);
-                
-                const btn = document.querySelector('.btn-primary');
-                if (btn) {
-                    const originalHTML = btn.innerHTML;
-                    btn.innerHTML = '<i class="fas fa-check"></i> ¡Copiado!';
-                    btn.style.background = 'linear-gradient(45deg, #00FF00, #00CC00)';
-                    
-                    setTimeout(() => {
-                        btn.innerHTML = originalHTML;
-                        btn.style.background = 'linear-gradient(45deg, #FFD700, #FFA500)';
-                    }, 2000);
-                }
-            } catch (err) {
-                alert('Error al copiar: ' + err.message);
-            }
-        }
-
-        // Actualizar todo
-        async function updateStats() {
-            await updateCounter();
-            await getDetailedStats();
+            const btn = document.querySelector('.btn-primary');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i> ¡COPIADO!';
+            btn.style.background = 'linear-gradient(45deg, #00FF00, #00CC00)';
             
-            const btn = document.querySelector('.btn-secondary');
-            if (btn) {
-                btn.innerHTML = '<i class="fas fa-check"></i> Actualizado';
-                setTimeout(() => {
-                    btn.innerHTML = '<i class="fas fa-sync-alt"></i> Actualizar';
-                }, 1000);
-            }
-        }
-
-        // Mostrar estadísticas en consola
-        async function showStats() {
-            const stats = await getDetailedStats();
-            if (stats && stats.summary) {
-                console.log('📊 ESTADÍSTICAS DETALLADAS:', stats);
-                alert(`Total: ${formatNumber(stats.summary.total)}\nHoy: ${formatNumber(stats.summary.today)}\nOnline: ${formatNumber(stats.summary.online)}`);
-            } else {
-                alert('No se pudieron cargar las estadísticas');
-            }
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.style.background = 'linear-gradient(45deg, #FFD700, #FFA500)';
+            }, 2000);
         }
 
         // Sistema de actualización automática
         function startAutoUpdate() {
-            // Actualizar contador cada 3 segundos
-            setInterval(updateCounter, 3000);
+            updateStats();
+            getDetailedStats();
             
-            // Actualizar estadísticas cada 30 segundos
+            setInterval(updateStats, 3000);
             setInterval(getDetailedStats, 30000);
-            
-            // Actualizar título dinámico
-            setInterval(() => {
-                const onlineElement = document.getElementById('online');
-                if (onlineElement) {
-                    const online = onlineElement.textContent || '0';
-                    document.title = `🏆 ${online} Online | Contador Dorado`;
-                }
-            }, 5000);
-        }
-
-        // Conectar con WebSocket si está disponible
-        function connectWebSocket() {
-            try {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const host = window.location.host.replace('http://', '').replace('https://', '');
-                const ws = new WebSocket(`${protocol}//${host}`);
-                
-                ws.onopen = () => {
-                    console.log('🔗 WebSocket conectado');
-                    const statusElement = document.getElementById('status');
-                    if (statusElement) {
-                        statusElement.innerHTML = '🟢 Conectado en tiempo real';
-                    }
-                };
-                
-                ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'STATS_UPDATE') {
-                            updateCounter();
-                        }
-                    } catch (e) {
-                        console.error('Error procesando mensaje WebSocket:', e);
-                    }
-                };
-                
-                ws.onclose = () => {
-                    console.log('WebSocket desconectado, reconectando en 5s...');
-                    setTimeout(connectWebSocket, 5000);
-                };
-                
-                ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                };
-                
-                return ws;
-            } catch (error) {
-                console.log('WebSocket no disponible:', error);
-                return null;
-            }
         }
 
         // Inicializar
         document.addEventListener('DOMContentLoaded', () => {
             createParticles();
             initCharts();
-            updateCounter().then(() => getDetailedStats());
             startAutoUpdate();
             
-            // Efecto de carga
+            // Efecto fade in
             document.body.style.opacity = '0';
-            document.body.style.transition = 'opacity 1s';
             setTimeout(() => {
+                document.body.style.transition = 'opacity 1s';
                 document.body.style.opacity = '1';
             }, 100);
-            
-            // Intentar conectar WebSocket
-            if (window.location.protocol === 'https:') {
-                setTimeout(connectWebSocket, 2000);
-            }
-        });
-
-        // Manejar errores no capturados
-        window.addEventListener('error', (event) => {
-            console.error('Error no capturado:', event.error);
-        });
-
-        // Manejar promesas rechazadas no capturadas
-        window.addEventListener('unhandledrejection', (event) => {
-            console.error('Promesa rechazada no capturada:', event.reason);
         });
     </script>
 </body>
