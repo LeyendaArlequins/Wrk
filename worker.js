@@ -14,6 +14,7 @@ class ContadorStats {
                     sessions: new Map(Object.entries(saved.sessions || {})),
                     hourlyStats: new Map(Object.entries(saved.hourlyStats || {})),
                     dailyStats: new Map(Object.entries(saved.dailyStats || {})),
+                    onlineHistory: new Map(Object.entries(saved.onlineHistory || {})), // NUEVO
                 };
             } else {
                 this.stats = {
@@ -24,6 +25,7 @@ class ContadorStats {
                     sessions: new Map(),
                     hourlyStats: new Map(),
                     dailyStats: new Map(),
+                    onlineHistory: new Map(), // NUEVO: Historial de online por minuto/hora
                     peakOnline: 0,
                     peakToday: 0,
                     lastReset: new Date().toDateString(),
@@ -70,6 +72,19 @@ class ContadorStats {
                     result = await this.updateHeartbeat(sessionId, userId);
                     break;
                     
+                case '/online-history': // NUEVA API
+                    result = await this.getOnlineHistory();
+                    break;
+                    
+                case '/player-time': // NUEVA API para tiempo de jugadores
+                    const { userId: playerUserId } = Object.fromEntries(url.searchParams);
+                    result = await this.getPlayerActiveTime(playerUserId);
+                    break;
+                    
+                case '/active-players': // NUEVA API para lista de jugadores activos con su tiempo
+                    result = await this.getActivePlayersWithTime();
+                    break;
+                    
                 default:
                     return new Response(JSON.stringify({ error: 'Endpoint no encontrado' }), {
                         status: 404,
@@ -97,7 +112,9 @@ class ContadorStats {
         const now = new Date();
         const today = now.toDateString();
         const hour = now.getHours();
+        const minute = now.getMinutes();
         const hourKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-${hour}`;
+        const minuteKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-${hour}-${minute}`;
         
         this.stats.total++;
         this.stats.today++;
@@ -107,17 +124,37 @@ class ContadorStats {
             this.stats.peakToday = this.stats.today;
         }
         
-        // Actualizar estadísticas por hora
+        // MODIFICADO: Registrar online por hora en lugar de ejecuciones
         if (!this.stats.hourlyStats.has(hourKey)) {
             this.stats.hourlyStats.set(hourKey, {
                 hour: hourKey,
-                count: 1,
+                maxOnline: this.stats.online, // Guardar máximo online en esa hora
+                avgOnline: this.stats.online,
+                samples: 1,
                 timestamp: now.toISOString()
             });
         } else {
             const hourStat = this.stats.hourlyStats.get(hourKey);
-            hourStat.count++;
+            // Actualizar máximo online
+            if (this.stats.online > hourStat.maxOnline) {
+                hourStat.maxOnline = this.stats.online;
+            }
+            // Actualizar promedio
+            hourStat.avgOnline = Math.round((hourStat.avgOnline * hourStat.samples + this.stats.online) / (hourStat.samples + 1));
+            hourStat.samples++;
             hourStat.timestamp = now.toISOString();
+        }
+        
+        // NUEVO: Registrar historial de online por minuto
+        if (!this.stats.onlineHistory.has(minuteKey)) {
+            this.stats.onlineHistory.set(minuteKey, {
+                minute: minuteKey,
+                online: this.stats.online,
+                timestamp: now.toISOString()
+            });
+            
+            // Limpiar historial antiguo (mantener últimas 24 horas)
+            this.cleanupOnlineHistory();
         }
         
         // Actualizar estadísticas diarias
@@ -125,15 +162,25 @@ class ContadorStats {
             this.stats.dailyStats.set(today, {
                 date: today,
                 count: 1,
-                uniqueUsers: new Set([userId])
+                uniqueUsers: new Set([userId]),
+                maxOnline: this.stats.online,
+                avgOnline: this.stats.online
             });
         } else {
             const dayStat = this.stats.dailyStats.get(today);
             dayStat.count++;
             dayStat.uniqueUsers.add(userId);
+            // Actualizar máximo online del día
+            if (this.stats.online > dayStat.maxOnline) {
+                dayStat.maxOnline = this.stats.online;
+            }
+            // Actualizar promedio online del día
+            dayStat.avgOnline = Math.round((dayStat.avgOnline + this.stats.online) / 2);
         }
         
         const userKey = `user_${userId}`;
+        const nowTime = Date.now();
+        
         if (!this.stats.uniqueUsers.has(userKey)) {
             this.stats.uniqueUsers.set(userKey, {
                 userId,
@@ -141,6 +188,8 @@ class ContadorStats {
                 firstSeen: now.toISOString(),
                 lastSeen: now.toISOString(),
                 totalExecutions: 1,
+                totalActiveTime: 0, // NUEVO: Tiempo total activo en ms
+                currentSessionStart: nowTime, // NUEVO: Inicio de sesión actual
                 sessions: [sessionId]
             });
         } else {
@@ -150,9 +199,12 @@ class ContadorStats {
             if (!user.sessions.includes(sessionId)) {
                 user.sessions.push(sessionId);
             }
+            // Si no tenía sesión activa, iniciar nueva
+            if (!user.currentSessionStart) {
+                user.currentSessionStart = nowTime;
+            }
         }
         
-        // MEJORA: Siempre crear/actualizar sesión incluso si ya existe
         if (sessionId) {
             this.stats.sessions.set(sessionId, {
                 userId,
@@ -160,10 +212,10 @@ class ContadorStats {
                 lastHeartbeat: Date.now(),
                 created: Date.now(),
                 gameId,
-                lastActivity: Date.now()
+                lastActivity: Date.now(),
+                totalActiveTime: 0 // NUEVO: Tiempo activo en esta sesión
             });
             
-            // Actualizar contador de online
             this.stats.online = this.stats.sessions.size;
             
             if (this.stats.online > this.stats.peakOnline) {
@@ -180,14 +232,14 @@ class ContadorStats {
                 today: this.stats.today,
                 online: this.stats.online,
                 unique: this.stats.uniqueUsers.size,
-                yourTotal: this.stats.uniqueUsers.get(userKey)?.totalExecutions || 1
+                yourTotal: this.stats.uniqueUsers.get(userKey)?.totalExecutions || 1,
+                yourActiveTime: this.stats.uniqueUsers.get(userKey)?.totalActiveTime || 0
             },
             timestamp: now.toISOString()
         };
     }
 
     async getCounterStats() {
-        // Siempre limpiar sesiones antes de devolver datos
         this.cleanupSessions();
         this.checkDailyReset();
         
@@ -199,7 +251,7 @@ class ContadorStats {
             peakOnline: this.stats.peakOnline,
             peakToday: this.stats.peakToday,
             lastUpdate: new Date().toISOString(),
-            sessionsCount: this.stats.sessions.size // Para debug
+            sessionsCount: this.stats.sessions.size
         };
     }
 
@@ -207,10 +259,10 @@ class ContadorStats {
         this.cleanupSessions();
         this.checkDailyReset();
         
-        // Obtener últimas 12 horas
+        // Obtener últimas 24 horas (por hora) - AHORA CON DATOS DE ONLINE
         const now = new Date();
         const hourlyData = [];
-        for (let i = 11; i >= 0; i--) {
+        for (let i = 23; i >= 0; i--) {
             const hour = new Date(now);
             hour.setHours(now.getHours() - i);
             const hourKey = `${hour.getFullYear()}-${hour.getMonth()+1}-${hour.getDate()}-${hour.getHours()}`;
@@ -218,8 +270,25 @@ class ContadorStats {
             
             hourlyData.push({
                 hour: `${hour.getHours()}:00`,
-                count: hourStat ? hourStat.count : 0,
+                maxOnline: hourStat ? hourStat.maxOnline : 0,
+                avgOnline: hourStat ? hourStat.avgOnline : 0,
+                samples: hourStat ? hourStat.samples : 0,
                 date: hourKey
+            });
+        }
+        
+        // Obtener últimos 30 minutos para datos en tiempo real
+        const minuteData = [];
+        for (let i = 29; i >= 0; i--) {
+            const minute = new Date(now);
+            minute.setMinutes(now.getMinutes() - i);
+            const minuteKey = `${minute.getFullYear()}-${minute.getMonth()+1}-${minute.getDate()}-${minute.getHours()}-${minute.getMinutes()}`;
+            const minuteStat = this.stats.onlineHistory.get(minuteKey);
+            
+            minuteData.push({
+                time: `${minute.getHours()}:${minute.getMinutes().toString().padStart(2, '0')}`,
+                online: minuteStat ? minuteStat.online : this.stats.online,
+                timestamp: minuteStat ? minuteStat.timestamp : now.toISOString()
             });
         }
         
@@ -232,13 +301,15 @@ class ContadorStats {
             const dayStat = this.stats.dailyStats.get(dayKey);
             
             dailyData.push({
-                date: dayKey.substring(4, 10), // Formato corto: "Dec 15"
+                date: dayKey.substring(4, 10),
                 count: dayStat ? dayStat.count : 0,
-                unique: dayStat ? dayStat.uniqueUsers.size : 0
+                unique: dayStat ? dayStat.uniqueUsers.size : 0,
+                maxOnline: dayStat ? dayStat.maxOnline : 0,
+                avgOnline: dayStat ? dayStat.avgOnline : 0
             });
         }
         
-        // Calcular estadísticas por hora actual
+        // Estadísticas de la hora actual
         const currentHour = new Date();
         currentHour.setMinutes(0, 0, 0);
         const currentHourKey = `${currentHour.getFullYear()}-${currentHour.getMonth()+1}-${currentHour.getDate()}-${currentHour.getHours()}`;
@@ -257,37 +328,267 @@ class ContadorStats {
                 activeSessions: this.stats.sessions.size
             },
             hourly: hourlyData,
+            minuteRealtime: minuteData,
             daily: dailyData,
             currentHour: {
-                count: currentHourStat ? currentHourStat.count : 0,
+                maxOnline: currentHourStat ? currentHourStat.maxOnline : this.stats.online,
+                avgOnline: currentHourStat ? currentHourStat.avgOnline : this.stats.online,
+                samples: currentHourStat ? currentHourStat.samples : 0,
                 hour: currentHourKey
             },
             lastUpdate: new Date().toISOString()
         };
     }
 
-    // MEJORA: Aumentar tiempo de limpieza a 90 segundos
-    cleanupSessions() {
-    const now = Date.now();
-    const sessionsToDelete = [];
-    
-    for (const [sessionId, session] of this.stats.sessions.entries()) {
-        // 15 minutos sin heartbeat = sesión muerta
-        if (now - session.lastHeartbeat > 10 * 60 * 1000) {
-            sessionsToDelete.push(sessionId);
+    // NUEVA: API para obtener historial de online
+    async getOnlineHistory() {
+        this.cleanupSessions();
+        
+        const now = new Date();
+        const history = [];
+        
+        // Últimas 24 horas por hora (resumido)
+        for (let i = 23; i >= 0; i--) {
+            const hour = new Date(now);
+            hour.setHours(now.getHours() - i);
+            const hourKey = `${hour.getFullYear()}-${hour.getMonth()+1}-${hour.getDate()}-${hour.getHours()}`;
+            const hourStat = this.stats.hourlyStats.get(hourKey);
+            
+            history.push({
+                period: 'hour',
+                time: `${hour.getHours()}:00`,
+                maxOnline: hourStat ? hourStat.maxOnline : 0,
+                avgOnline: hourStat ? hourStat.avgOnline : 0,
+                timestamp: hourStat ? hourStat.timestamp : hour.toISOString()
+            });
+        }
+        
+        // Última hora por minuto (detallado)
+        const minuteHistory = [];
+        for (let i = 59; i >= 0; i--) {
+            const minute = new Date(now);
+            minute.setMinutes(now.getMinutes() - i);
+            const minuteKey = `${minute.getFullYear()}-${minute.getMonth()+1}-${minute.getDate()}-${minute.getHours()}-${minute.getMinutes()}`;
+            const minuteStat = this.stats.onlineHistory.get(minuteKey);
+            
+            if (minuteStat || i < 5) { // Incluir últimos 5 minutos aunque no haya datos
+                minuteHistory.push({
+                    time: `${minute.getHours()}:${minute.getMinutes().toString().padStart(2, '0')}`,
+                    online: minuteStat ? minuteStat.online : this.stats.online,
+                    timestamp: minuteStat ? minuteStat.timestamp : now.toISOString()
+                });
+            }
+        }
+        
+        return {
+            currentOnline: this.stats.online,
+            peakOnline: this.stats.peakOnline,
+            history: history,
+            recentMinutes: minuteHistory.slice(-30), // Últimos 30 minutos
+            lastUpdate: now.toISOString()
+        };
+    }
+
+    // NUEVA: Calcular tiempo activo de un jugador
+    async getPlayerActiveTime(userId) {
+        this.cleanupSessions();
+        
+        if (!userId) {
+            const activePlayers = [];
+            for (const [_, user] of this.stats.uniqueUsers) {
+                const session = this.findUserSession(user.userId);
+                const activeTime = this.calculatePlayerActiveTime(user, session);
+                activePlayers.push({
+                    userId: user.userId,
+                    playerName: user.playerName,
+                    totalActiveTime: user.totalActiveTime || 0,
+                    currentSessionTime: activeTime.currentSessionTime,
+                    lastSeen: user.lastSeen,
+                    isOnline: !!session
+                });
+            }
+            
+            // Ordenar por tiempo activo (descendente)
+            activePlayers.sort((a, b) => b.totalActiveTime - a.totalActiveTime);
+            
+            return {
+                success: true,
+                count: activePlayers.length,
+                players: activePlayers.slice(0, 50) // Top 50
+            };
+        }
+        
+        const userKey = `user_${userId}`;
+        const user = this.stats.uniqueUsers.get(userKey);
+        
+        if (!user) {
+            return {
+                success: false,
+                error: 'Usuario no encontrado'
+            };
+        }
+        
+        const session = this.findUserSession(userId);
+        const activeTime = this.calculatePlayerActiveTime(user, session);
+        
+        return {
+            success: true,
+            userId: user.userId,
+            playerName: user.playerName,
+            stats: {
+                firstSeen: user.firstSeen,
+                lastSeen: user.lastSeen,
+                totalExecutions: user.totalExecutions,
+                totalActiveTime: user.totalActiveTime || 0,
+                totalActiveTimeFormatted: this.formatTime(user.totalActiveTime || 0),
+                currentSessionTime: activeTime.currentSessionTime,
+                currentSessionTimeFormatted: this.formatTime(activeTime.currentSessionTime),
+                isOnline: activeTime.isOnline,
+                sessionsCount: user.sessions ? user.sessions.length : 0
+            }
+        };
+    }
+
+    // NUEVA: Lista de jugadores activos con su tiempo
+    async getActivePlayersWithTime() {
+        this.cleanupSessions();
+        
+        const activePlayers = [];
+        
+        for (const [sessionId, session] of this.stats.sessions.entries()) {
+            const userKey = `user_${session.userId}`;
+            const user = this.stats.uniqueUsers.get(userKey);
+            
+            if (user) {
+                const sessionTime = Date.now() - (session.created || Date.now());
+                
+                activePlayers.push({
+                    userId: session.userId,
+                    playerName: session.playerName,
+                    sessionId: sessionId,
+                    activeTime: sessionTime,
+                    activeTimeFormatted: this.formatTime(sessionTime),
+                    lastHeartbeat: session.lastHeartbeat,
+                    lastHeartbeatFormatted: new Date(session.lastHeartbeat).toISOString(),
+                    gameId: session.gameId
+                });
+            }
+        }
+        
+        // Ordenar por tiempo activo (más tiempo primero)
+        activePlayers.sort((a, b) => b.activeTime - a.activeTime);
+        
+        return {
+            success: true,
+            online: this.stats.online,
+            players: activePlayers,
+            timestamp: new Date().toISOString()
+        };
+    }
+
+    // NUEVO: Buscar sesión activa de un usuario
+    findUserSession(userId) {
+        for (const [_, session] of this.stats.sessions.entries()) {
+            if (session.userId === userId) {
+                return session;
+            }
+        }
+        return null;
+    }
+
+    // NUEVO: Calcular tiempo activo de un jugador
+    calculatePlayerActiveTime(user, session) {
+        const now = Date.now();
+        let currentSessionTime = 0;
+        let isOnline = false;
+        
+        if (session) {
+            isOnline = true;
+            const sessionStart = session.created || now;
+            currentSessionTime = now - sessionStart;
+            
+            // Actualizar tiempo total si hay sesión activa
+            if (user) {
+                user.totalActiveTime = (user.totalActiveTime || 0) + (now - (user.lastActiveUpdate || sessionStart));
+                user.lastActiveUpdate = now;
+            }
+        } else if (user && user.currentSessionStart) {
+            // Sesión terminada, calcular tiempo de la última sesión
+            currentSessionTime = now - user.currentSessionStart;
+            user.totalActiveTime = (user.totalActiveTime || 0) + currentSessionTime;
+            user.currentSessionStart = null;
+        }
+        
+        return {
+            isOnline,
+            currentSessionTime,
+            totalActiveTime: user ? (user.totalActiveTime || 0) : 0
+        };
+    }
+
+    // NUEVO: Formatear tiempo en formato legible
+    formatTime(ms) {
+        if (ms < 1000) return `${ms}ms`;
+        
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        if (days > 0) {
+            return `${days}d ${hours % 24}h ${minutes % 60}m`;
+        } else if (hours > 0) {
+            return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+        } else if (minutes > 0) {
+            return `${minutes}m ${seconds % 60}s`;
+        } else {
+            return `${seconds}s`;
         }
     }
-    
+
+    // NUEVO: Limpiar historial de online (mantener últimas 24 horas)
+    cleanupOnlineHistory() {
+        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+        const keysToDelete = [];
         
-        // Eliminar sesiones muertas
+        for (const [key, value] of this.stats.onlineHistory.entries()) {
+            if (new Date(value.timestamp).getTime() < oneDayAgo) {
+                keysToDelete.push(key);
+            }
+        }
+        
+        for (const key of keysToDelete) {
+            this.stats.onlineHistory.delete(key);
+        }
+    }
+
+    cleanupSessions() {
+        const now = Date.now();
+        const sessionsToDelete = [];
+        
+        for (const [sessionId, session] of this.stats.sessions.entries()) {
+            // 10 minutos sin heartbeat = sesión muerta
+            if (now - session.lastHeartbeat > 10 * 60 * 1000) {
+                sessionsToDelete.push(sessionId);
+                
+                // Actualizar tiempo total del usuario
+                const userKey = `user_${session.userId}`;
+                const user = this.stats.uniqueUsers.get(userKey);
+                if (user) {
+                    const sessionTime = now - (session.created || now);
+                    user.totalActiveTime = (user.totalActiveTime || 0) + sessionTime;
+                    user.currentSessionStart = null;
+                    user.lastActiveUpdate = null;
+                }
+            }
+        }
+        
         for (const sessionId of sessionsToDelete) {
             this.stats.sessions.delete(sessionId);
         }
         
-        // Actualizar contador de online
         this.stats.online = this.stats.sessions.size;
         
-        // Si eliminamos sesiones, guardar cambios
         if (sessionsToDelete.length > 0) {
             this.saveStats().catch(console.error);
         }
@@ -303,7 +604,6 @@ class ContadorStats {
         }
     }
 
-    // MEJORA: Manejo mejorado de heartbeat
     async updateHeartbeat(sessionId, userId) {
         if (!sessionId || !userId) {
             return { success: false, online: this.stats.online };
@@ -314,8 +614,22 @@ class ContadorStats {
         const now = Date.now();
         
         if (this.stats.sessions.has(sessionId)) {
-            // Actualizar sesión existente
             const session = this.stats.sessions.get(sessionId);
+            
+            // Calcular tiempo desde último heartbeat y acumular
+            const timeSinceLastHeartbeat = now - (session.lastHeartbeat || now);
+            if (timeSinceLastHeartbeat > 0 && timeSinceLastHeartbeat < 60000) { // Menos de 1 minuto
+                session.totalActiveTime = (session.totalActiveTime || 0) + timeSinceLastHeartbeat;
+                
+                // Actualizar tiempo total del usuario
+                const userKey = `user_${userId}`;
+                const user = this.stats.uniqueUsers.get(userKey);
+                if (user) {
+                    user.totalActiveTime = (user.totalActiveTime || 0) + timeSinceLastHeartbeat;
+                    user.lastActiveUpdate = now;
+                }
+            }
+            
             session.lastHeartbeat = now;
             session.lastActivity = now;
             
@@ -326,12 +640,9 @@ class ContadorStats {
                 message: "Heartbeat actualizado"
             };
         } else {
-            // Sesión no encontrada, crear una nueva si userId coincide
-            // Buscar si el usuario tiene otra sesión activa
             let userSessionFound = false;
             for (const [sid, session] of this.stats.sessions.entries()) {
                 if (session.userId === userId) {
-                    // Actualizar sesión existente del usuario
                     session.lastHeartbeat = now;
                     session.lastActivity = now;
                     userSessionFound = true;
@@ -340,14 +651,21 @@ class ContadorStats {
             }
             
             if (!userSessionFound) {
-                // Crear nueva sesión
                 this.stats.sessions.set(sessionId, {
                     userId,
                     playerName: `User_${userId}`,
                     lastHeartbeat: now,
                     created: now,
-                    lastActivity: now
+                    lastActivity: now,
+                    totalActiveTime: 0
                 });
+                
+                // Actualizar inicio de sesión en usuario
+                const userKey = `user_${userId}`;
+                const user = this.stats.uniqueUsers.get(userKey);
+                if (user) {
+                    user.currentSessionStart = now;
+                }
                 
                 this.stats.online = this.stats.sessions.size;
                 
@@ -367,26 +685,18 @@ class ContadorStats {
 
     async saveStats() {
         try {
-            // Convertir Maps a objetos para almacenamiento
             const toSave = {
                 ...this.stats,
                 uniqueUsers: Object.fromEntries(this.stats.uniqueUsers),
                 sessions: Object.fromEntries(this.stats.sessions),
                 hourlyStats: Object.fromEntries(this.stats.hourlyStats),
-                dailyStats: Object.fromEntries(this.stats.dailyStats.entries())
+                dailyStats: Object.fromEntries(this.stats.dailyStats.entries()),
+                onlineHistory: Object.fromEntries(this.stats.onlineHistory.entries()) // NUEVO
             };
             
-            // Convertir Sets a arrays para dailyStats
             for (const [key, value] of Object.entries(toSave.dailyStats || {})) {
                 if (value.uniqueUsers && value.uniqueUsers instanceof Set) {
                     value.uniqueUsers = Array.from(value.uniqueUsers);
-                }
-            }
-            
-            // Convertir arrays de sesiones en usuarios
-            for (const [key, user] of Object.entries(toSave.uniqueUsers || {})) {
-                if (user.sessions && Array.isArray(user.sessions)) {
-                    // Mantener como array
                 }
             }
             
@@ -419,7 +729,7 @@ export default {
         const id = env.CONTADOR_STATS.idFromName('main');
         const obj = env.CONTADOR_STATS.get(id);
         
-        // Manejar ambas versiones: con y sin .js
+        // APIs existentes
         if (path === '/api/count' || path === '/api/count.js') {
             const newUrl = new URL(url);
             newUrl.pathname = '/increment';
@@ -444,23 +754,41 @@ export default {
             return obj.fetch(newUrl);
         }
         
-        // Script para Roblox - MEJORADO
+        // NUEVAS APIs
+        if (path === '/api/online-history' || path === '/api/online-history.js') {
+            const newUrl = new URL(url);
+            newUrl.pathname = '/online-history';
+            return obj.fetch(newUrl);
+        }
+        
+        if (path === '/api/player-time' || path === '/api/player-time.js') {
+            const newUrl = new URL(url);
+            newUrl.pathname = '/player-time';
+            return obj.fetch(newUrl);
+        }
+        
+        if (path === '/api/active-players' || path === '/api/active-players.js') {
+            const newUrl = new URL(url);
+            newUrl.pathname = '/active-players';
+            return obj.fetch(newUrl);
+        }
+        
+        // Script para Roblox - ACTUALIZADO
         if (path === '/api/script' || path === '/api/script.js') {
             const baseUrl = `https://${url.hostname}`;
             
-            const script = `-- 🏆 CONTADOR DORADO - SISTEMA MEJORADO 🏆
--- Estado PERSISTENTE con mejor manejo de sesiones
--- URL: ${baseUrl}
-
+            const script = `-- 🏆 CONTADOR DORADO - CON TIEMPO DE JUEGO 🏆
+-- Ahora con medición de tiempo activo
 local HttpService = game:GetService("HttpService")
 local player = game.Players.LocalPlayer
 
 local API = "${baseUrl}/api"
 local sessionId = "S_" .. player.UserId .. "_" .. math.random(1000,9999)
+local startTime = os.clock()
+local totalPlayTime = 0
 
-print("🏆 CONTADOR DORADO - SISTEMA MEJORADO")
+print("🏆 CONTADOR DORADO - CON TIEMPO DE JUEGO")
 
--- Función para enviar requests con mejor manejo de errores
 local function sendRequest(endpoint, params)
     local url = API .. endpoint .. "?"
     
@@ -482,70 +810,38 @@ local function sendRequest(endpoint, params)
     if success then
         return result
     else
-        print("⚠️ Error en request: " .. tostring(result))
         return nil
     end
 end
 
--- 1. Registrar ejecución INICIAL
-print("📤 Registrando ejecución inicial...")
+-- Registro inicial
+print("📤 Registrando ejecución...")
 local response = sendRequest("count.js", {
     userId = player.UserId,
     playerName = player.Name,
     sessionId = sessionId,
-    gameId = game.GameId,
-    time = os.time()
+    gameId = game.GameId
 })
 
 if response then
-    print("✅ Ejecución registrada")
-    
-    -- Parsear respuesta
     local jsonSuccess, data = pcall(function()
         return HttpService:JSONDecode(response)
     end)
     
     if jsonSuccess and data.stats then
-        print("📊 Total: " .. data.stats.total)
-        print("🎯 Hoy: " .. data.stats.today)
-        print("👥 Online: " .. data.stats.online)
-        print("⭐ Únicos: " .. data.stats.unique)
-        print("🔥 Tuyas: " .. data.stats.yourTotal)
+        print("✅ Registrado - Total: " .. data.stats.total .. " | Online: " .. data.stats.online)
     end
-else
-    print("⚠️ No se pudo registrar ejecución inicial")
 end
 
--- 2. Obtener contador actual (para verificar)
-task.wait(2)
-print("\\n📡 Obteniendo contador actual...")
-local counter = sendRequest("counter.js", {})
-if counter then
-    local jsonSuccess, data = pcall(function()
-        return HttpService:JSONDecode(counter)
-    end)
-    
-    if jsonSuccess then
-        print("📈 CONTADOR ACTUAL:")
-        print("   Total: " .. data.total)
-        print("   Hoy: " .. data.today)
-        print("   Online: " .. data.online)
-        print("   Únicos: " .. data.unique)
-        print("   Sesiones activas: " .. tostring(data.sessionsCount or "N/A"))
-    end
-else
-    print("⚠️ No se pudo obtener contador")
-end
-
--- 3. Sistema de heartbeat MEJORADO
-print("\\n💓 Heartbeat mejorado iniciado (cada 25 segundos)")
+-- Heartbeat mejorado con tiempo de juego
+print("💓 Heartbeat iniciado (cada 30 segundos)")
 local heartbeatCount = 0
-local lastHeartbeatSuccess = true
 
 while true do
-    task.wait(25) -- Reducido a 25 segundos para mayor seguridad
+    task.wait(30)
     
     heartbeatCount = heartbeatCount + 1
+    totalPlayTime = os.clock() - startTime
     
     local result = sendRequest("heartbeat.js", {
         sessionId = sessionId,
@@ -558,41 +854,30 @@ while true do
         end)
         
         if jsonSuccess and data.success then
-            if not lastHeartbeatSuccess then
-                print("✅ Heartbeat restaurado - Online: " .. tostring(data.online))
-                lastHeartbeatSuccess = true
+            if heartbeatCount % 5 == 0 then
+                print(string.format("💗 Heartbeat #%d - Online: %d - Tiempo: %.1f min", 
+                    heartbeatCount, data.online, totalPlayTime / 60))
             end
-            
-            -- Mostrar progreso cada 10 heartbeats
-            if heartbeatCount % 10 == 0 then
-                print("💗 Heartbeat #" .. heartbeatCount .. " - Online: " .. data.online)
-            end
-        else
-            if lastHeartbeatSuccess then
-                print("⚠️ Heartbeat falló (intentando reconectar...)")
-                lastHeartbeatSuccess = false
-            end
-        end
-    else
-        if lastHeartbeatSuccess then
-            print("⚠️ No se pudo enviar heartbeat")
-            lastHeartbeatSuccess = false
         end
     end
     
-    -- Intentar reconexión completa cada 60 heartbeats (~25 minutos)
-    if heartbeatCount % 60 == 0 then
-        print("🔄 Reconexión programada...")
-        local reconnect = sendRequest("count.js", {
-            userId = player.UserId,
-            playerName = player.Name,
-            sessionId = sessionId,
-            gameId = game.GameId,
-            reconnect = true
+    -- Verificar tiempo de juego cada 10 heartbeats
+    if heartbeatCount % 10 == 0 then
+        local timeData = sendRequest("player-time.js", {
+            userId = player.UserId
         })
         
-        if reconnect then
-            print("✅ Reconexión exitosa")
+        if timeData then
+            local jsonSuccess, data = pcall(function()
+                return HttpService:JSONDecode(timeData)
+            end)
+            
+            if jsonSuccess and data.success then
+                print("⏱️ Tu tiempo total: " .. data.stats.totalActiveTimeFormatted)
+                if data.stats.isOnline then
+                    print("   Sesión actual: " .. data.stats.currentSessionTimeFormatted)
+                end
+            end
         end
     end
 end`;
@@ -605,7 +890,6 @@ end`;
             });
         }
         
-        // Ruta para debug
         if (path === '/api/debug') {
             const id = env.CONTADOR_STATS.idFromName('main');
             const obj = env.CONTADOR_STATS.get(id);
@@ -614,15 +898,16 @@ end`;
             return obj.fetch(newUrl);
         }
         
-        // Si el path es solo "/", servir página principal
         if (path === "/") {
             return new Response(JSON.stringify({
-                message: "Contador Dorado API",
+                message: "Contador Dorado API - Con tiempo de juego",
                 endpoints: {
                     counter: "/api/counter.js",
-                    stats: "/api/stats.js",
-                    script: "/api/script.js",
-                    debug: "/api/debug"
+                    stats: "/api/stats.js (ahora con online por hora)",
+                    "online-history": "/api/online-history.js",
+                    "player-time": "/api/player-time.js?userId=123",
+                    "active-players": "/api/active-players.js",
+                    script: "/api/script.js"
                 }
             }), {
                 headers: { ...headers, 'Content-Type': 'application/json' }
@@ -636,8 +921,10 @@ end`;
                 '/api/counter.js', 
                 '/api/stats.js',
                 '/api/heartbeat.js',
+                '/api/online-history.js',
+                '/api/player-time.js',
+                '/api/active-players.js',
                 '/api/script.js',
-                '/api/debug',
                 '/'
             ]
         }), {
@@ -647,5 +934,4 @@ end`;
     }
 };
 
-// Exporta la clase del Durable Object
 export { ContadorStats };
