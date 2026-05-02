@@ -426,6 +426,12 @@ export default {
             newUrl.pathname = '/online-history';
             return obj.fetch(newUrl);
         }
+
+        if (path === '/api/sessions' || path === '/api/sessions.js') {
+            const newUrl = new URL(url);
+            newUrl.pathname = '/sessions';
+            return obj.fetch(newUrl);
+        }
         
         // Script simplificado para Roblox
         if (path === '/api/script' || path === '/api/script.js') {
