@@ -78,6 +78,10 @@ class ContadorStats {
                     const { sessionId } = Object.fromEntries(url.searchParams);
                     result = await this.updateHeartbeat(sessionId);
                     break;
+
+                case '/sessions':
+                   result = await this.getActiveSessions();
+                    break;
                     
                 case '/online-history': // Nueva API simplificada
                     result = await this.getOnlineHistory();
@@ -169,6 +173,26 @@ class ContadorStats {
             timestamp: now.toISOString()
         };
     }
+
+    async getActiveSessions() {
+    this.cleanupSessions();
+
+    const sessions = [];
+
+    for (const [sessionId, session] of this.stats.sessions.entries()) {
+        sessions.push({
+            sessionId,
+            lastHeartbeat: new Date(session.lastHeartbeat).toISOString(),
+            created: new Date(session.created).toISOString(),
+            aliveForSeconds: Math.floor((Date.now() - session.created) / 1000)
+        });
+    }
+
+    return {
+        total: sessions.length,
+        sessions
+    };
+}
 
     async getCounterStats() {
         this.cleanupSessions();
